@@ -10,6 +10,7 @@ import com.google.android.gms.common.api.ApiException
 import com.google.firebase.auth.AuthCredential
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.GoogleAuthProvider
+import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
@@ -18,12 +19,20 @@ import kotlinx.coroutines.tasks.await
 class LoginViewModel : ViewModel() {
 
     private val firebaseAuth: FirebaseAuth = FirebaseAuth.getInstance()
+    private val firestore: FirebaseFirestore = FirebaseFirestore.getInstance()
 
     private val _loginState = MutableStateFlow(false)
     val loginState: StateFlow<Boolean> = _loginState
 
     private val _errorMessage = MutableStateFlow<String?>(null)
     val errorMessage: StateFlow<String?> = _errorMessage
+
+    private val _needToRegister = MutableStateFlow(false)
+    val needToRegister: StateFlow<Boolean> = _needToRegister
+
+    fun triggerRegisterFlow() {
+        _needToRegister.value = true
+    }
 
     fun loginGoogle(activityResult: ActivityResult) {
         val task = GoogleSignIn.getSignedInAccountFromIntent(activityResult.data)
@@ -48,11 +57,17 @@ class LoginViewModel : ViewModel() {
         viewModelScope.launch {
             try {
                 val result = firebaseAuth.signInWithCredential(credential).await()
-                val isNewUser = result.additionalUserInfo?.isNewUser ?: false
                 val user = firebaseAuth.currentUser
 
-                // 신규 유저일 경우 Firestore 저장 등 로직 가능
-                _loginState.value = true
+                user?.let {
+                    val uid = it.uid
+                    val doc = firestore.collection("users").document(uid).get().await()
+                    if (doc.exists()) {
+                        _loginState.value = true // 로그인 성공
+                    } else {
+                        _needToRegister.value = true // 회원가입 필요
+                    }
+                }
 
             } catch (e: Exception) {
                 Log.e("Login", "Firebase login failed", e)

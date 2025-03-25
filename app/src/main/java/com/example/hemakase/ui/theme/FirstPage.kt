@@ -20,9 +20,17 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.hemakase.R
 
+
+@Preview(showBackground = true)
+@Composable
+fun FirstScreenPreview() {
+    FirstScreen() // 기본값 있는 버전 호출
+}
+
+
 @Composable
 fun FirstScreen(
-    onLoginClick: (String, String) -> Unit = { _, _ -> },
+    onLoginClick: () -> Unit = {},
     onRegisterClick: () -> Unit = {}
 ) {
     // 전체 화면을 세로(Column)로 배치
@@ -77,7 +85,7 @@ fun FirstScreen(
 
         // Login Button
         Button(
-            onClick = { /*ToDO*/ },
+            onClick = { onLoginClick() },
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 20.dp)
@@ -99,7 +107,7 @@ fun FirstScreen(
 
         // Register 이동 버튼(텍스트로 구현)
         Button(
-            onClick = { /*ToDo*/ },
+            onClick = { onRegisterClick() },
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 20.dp)

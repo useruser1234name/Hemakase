@@ -68,4 +68,9 @@ dependencies {
     implementation ("com.google.firebase:firebase-messaging-ktx") // FCM
     implementation("com.google.firebase:firebase-analytics")
     implementation(platform("com.google.firebase:firebase-bom:33.11.0"))
+
+    // Jetpack Lifecycle (ViewModel 등)
+    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.6.0")
+    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.6.0")
+
 }
