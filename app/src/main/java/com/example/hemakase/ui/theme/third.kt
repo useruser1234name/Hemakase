@@ -34,6 +34,13 @@ import androidx.compose.ui.unit.sp
 import com.example.hemakase.R
 
 
+
+@Preview(showBackground = true)
+@Composable
+fun thirdScreenPreview() {
+    CameraScreen() // 기본값 있는 버전 호출
+}
+
 @Composable
 fun CameraScreen() {
     Column(
