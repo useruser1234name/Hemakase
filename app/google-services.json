@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "1090328758097",
+    "firebase_url": "https://hemakase-default-rtdb.asia-southeast1.firebasedatabase.app",
+    "project_id": "hemakase",
+    "storage_bucket": "hemakase.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1090328758097:android:4d8ca983329ace3f4b7570",
+        "android_client_info": {
+          "package_name": "com.example.hemakase"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "1090328758097-ckucjimioo9n8cqunc49pr46n9hu7ink.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.hemakase",
+            "certificate_hash": "8670aecb6a82091f540b8a049d2c4b6dfd3b4ace"
+          }
+        },
+        {
+          "client_id": "1090328758097-nnsn94rh91ao7aiaan4peom1aagivqoe.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAqDDHiSkucbWbMrujgDlrLOh_WTEVSSUU"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "1090328758097-nnsn94rh91ao7aiaan4peom1aagivqoe.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
