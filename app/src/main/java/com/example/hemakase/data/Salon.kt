@@ -6,5 +6,5 @@ data class Salon(
     val address: String = "",
     val phone: String? = null,
     val ownerId: String = "", // 미용사(관리자) UID
-    val stylistIds: List<String> = emptyList() // 해당 미용실 소속 미용사들
+    val stylistIds: List<String> = listOf() // 해당 미용실 소속 미용사들
 )

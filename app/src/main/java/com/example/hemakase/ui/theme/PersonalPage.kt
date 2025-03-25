@@ -24,7 +24,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.hemakase.R
+import com.example.hemakase.viewmodel.RegisterViewModel
 
 @Composable
 @Preview(showBackground = true)
@@ -59,15 +61,9 @@ fun TopBarWithBackArrow() {
 
 @Composable
 fun PersonalScreen(
-    onNextClick: (
-        name: String,
-        userId: String,
-        password: String,
-        phoneNumber: String,
-        address: String,
-        isHairdresser: Boolean
-    ) -> Unit = { _, _, _, _, _, _ -> }
+    onNextClick: () -> Unit = {} // 다음 단계로 넘어갈 때 호출
 ) {
+    val registerViewModel: RegisterViewModel = viewModel()
     // 1) 사용자 입력 상태 정의
     var name by remember { mutableStateOf("") }
     var userId by remember { mutableStateOf("") }
@@ -304,14 +300,15 @@ fun PersonalScreen(
         // 11) Next 버튼
         Button(
             onClick = {
-                onNextClick(
-                    name,
-                    userId,
-                    password,
-                    phoneNumber,
-                    address,
-                    isHairdresser
+                // 회원가입 흐름 진행
+                registerViewModel.registerUser(
+                    name = name,
+                    phone = phoneNumber,
+                    address = address,
+                    isHairdresser = isHairdresser
                 )
+
+                onNextClick() // 다음 단계로 넘어가기 위한 콜백 (예: 사진 등록 등)
             },
             modifier = Modifier
                 .fillMaxWidth()

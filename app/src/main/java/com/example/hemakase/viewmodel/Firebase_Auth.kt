@@ -34,6 +34,11 @@ class LoginViewModel : ViewModel() {
         _needToRegister.value = true
     }
 
+    fun resetRegisterTrigger() {
+        _needToRegister.value = false
+    }
+
+
     fun loginGoogle(activityResult: ActivityResult) {
         val task = GoogleSignIn.getSignedInAccountFromIntent(activityResult.data)
         task.addOnCompleteListener { completedTask ->
@@ -52,6 +57,8 @@ class LoginViewModel : ViewModel() {
             }
         }
     }
+
+
 
     private fun signInWithCredential(credential: AuthCredential) {
         viewModelScope.launch {
