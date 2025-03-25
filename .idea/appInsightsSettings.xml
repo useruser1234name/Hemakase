@@ -22,10 +22,10 @@
             <InsightsFilterSettings>
               <option name="connection">
                 <ConnectionSetting>
-                  <option name="appId" value="PLACEHOLDER" />
-                  <option name="mobileSdkAppId" value="" />
-                  <option name="projectId" value="" />
-                  <option name="projectNumber" value="" />
+                  <option name="appId" value="com.example.hemakase" />
+                  <option name="mobileSdkAppId" value="1:1090328758097:android:4d8ca983329ace3f4b7570" />
+                  <option name="projectId" value="hemakase" />
+                  <option name="projectNumber" value="1090328758097" />
                 </ConnectionSetting>
               </option>
               <option name="signal" value="SIGNAL_UNSPECIFIED" />
