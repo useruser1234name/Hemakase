@@ -305,11 +305,12 @@ fun PersonalScreen(
         Button(
             onClick = {
                 // 회원가입 흐름 진행
-                registerViewModel.registerUser(
+                registerViewModel.setTempUserInfo(
                     name = name,
                     phone = phoneNumber,
                     address = address,
-                    isHairdresser = isHairdresser
+                    isHairdresser = isHairdresser,
+                    profileUri = null // 나중에 CameraScreen에서 넣을 수 있음
                 )
 
                 onNextClick() // 다음 단계로 넘어가기 위한 콜백 (예: 사진 등록 등)

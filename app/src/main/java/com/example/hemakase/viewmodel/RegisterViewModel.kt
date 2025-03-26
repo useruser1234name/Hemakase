@@ -1,5 +1,8 @@
 package com.example.hemakase.viewmodel
 
+import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -12,6 +15,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
+import java.io.ByteArrayOutputStream
 
 class RegisterViewModel : ViewModel() {
 
@@ -25,8 +29,30 @@ class RegisterViewModel : ViewModel() {
     private val _errorMessage = MutableStateFlow<String?>(null)
     val errorMessage: StateFlow<String?> = _errorMessage
 
+    var tempName: String = ""
+    var tempPhone: String = ""
+    var tempAddress: String = ""
+    var tempIsHairdresser: Boolean = false
+    var tempProfileUri: Uri? = null
+
+    fun setTempUserInfo(
+        name: String,
+        phone: String,
+        address: String,
+        isHairdresser: Boolean,
+        profileUri: Uri?
+    ) {
+        tempName = name
+        tempPhone = phone
+        tempAddress = address
+        tempIsHairdresser = isHairdresser
+        tempProfileUri = profileUri
+    }
+
+
     fun registerUser(
         name: String,
+        context: Context,
         phone: String,
         address: String,
         isHairdresser: Boolean,
@@ -42,10 +68,25 @@ class RegisterViewModel : ViewModel() {
                 val email = currentUser.email ?: ""
 
                 val photoUrl = profileUri?.let {
-                    val ref = storage.reference.child("profiles/$uid.jpg")
-                    ref.putFile(it).await()
-                    ref.downloadUrl.await().toString()
+                    try {
+                        val stream = context.contentResolver.openInputStream(it)
+                        val bitmap = BitmapFactory.decodeStream(stream)
+                        val baos = ByteArrayOutputStream()
+                        bitmap.compress(Bitmap.CompressFormat.JPEG, 100, baos)
+                        val data = baos.toByteArray()
+
+                        val ref = storage.reference.child("profiles/$uid.jpg")
+
+                        ref.putBytes(data).await()
+                        ref.downloadUrl.await().toString()
+                    } catch (e: Exception) {
+                        e.printStackTrace()
+                        _errorMessage.value = "사진 업로드 실패: ${e.message}"
+                        null
+                    }
                 }
+
+
 
                 if (isHairdresser) {
                     // 미용사 → 미용실 등록 또는 선택
@@ -70,7 +111,8 @@ class RegisterViewModel : ViewModel() {
                         role = "stylist",
                         phone = phone,
                         photo = photoUrl,
-                        salonId = salonId
+                        salonId = salonId,
+                        address = address
                     )
 
                     db.collection("users").document(uid).set(user).await()
@@ -83,7 +125,8 @@ class RegisterViewModel : ViewModel() {
                         role = "customer",
                         phone = phone,
                         photo = photoUrl,
-                        salonId = selectedSalonId // 고객은 선택 필수
+                        salonId = selectedSalonId, // 고객은 선택 필수
+                        address = address
                     )
 
                     db.collection("users").document(uid).set(user).await()
