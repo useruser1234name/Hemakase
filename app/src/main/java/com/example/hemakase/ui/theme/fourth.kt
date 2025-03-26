@@ -21,13 +21,16 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.hemakase.R
+import com.example.hemakase.viewmodel.RegisterViewModel
 
 @Preview(showBackground = true)
 @Composable
@@ -36,7 +39,22 @@ fun HairshopScreenPreview() {
 }
 
 @Composable
-fun HairshopScreen() {
+fun HairshopScreen(
+    onFinishRegistration: () -> Unit = {},
+    registerViewModel: RegisterViewModel = viewModel()
+) {
+
+    val context = LocalContext.current
+
+    var selectedShop by remember { mutableStateOf("미용실 선택") }
+    val salonIdMap = mapOf( // 샘플 미용실 리스트 → 실제로는 DB에서 불러오면 더 좋아요
+        "헤어샵 A" to "salon_a_id",
+        "헤어샵 B" to "salon_b_id",
+        "헤어샵 C" to "salon_c_id"
+    )
+
+    val selectedSalonId = salonIdMap[selectedShop] ?: ""
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -182,7 +200,16 @@ fun HairshopScreen() {
         // 버튼 (맨 아래)
         Button(
             onClick = {
-                /*TODO*/
+                registerViewModel.registerUser(
+                    context = context,
+                    name = registerViewModel.tempName,
+                    phone = registerViewModel.tempPhone,
+                    address = registerViewModel.tempAddress,
+                    isHairdresser = registerViewModel.tempIsHairdresser,
+                    profileUri = registerViewModel.tempProfileUri,
+                    selectedSalonId = selectedSalonId
+                )
+                onFinishRegistration()
             },
             modifier = Modifier
                 .fillMaxWidth()
@@ -235,7 +262,8 @@ fun HairshopSelectionArea() {
                 onValueChange = {},
                 label = { Text("") },
                 trailingIcon = {
-                    val icon = if (expandedShop) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown
+                    val icon =
+                        if (expandedShop) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown
                     Icon(imageVector = icon, contentDescription = null)
                 },
                 modifier = Modifier
@@ -270,7 +298,8 @@ fun HairshopSelectionArea() {
                 onValueChange = {},
                 label = { Text("") },
                 trailingIcon = {
-                    val icon = if (expandedHairdresser) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown
+                    val icon =
+                        if (expandedHairdresser) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown
                     Icon(imageVector = icon, contentDescription = null)
                 },
                 modifier = Modifier
