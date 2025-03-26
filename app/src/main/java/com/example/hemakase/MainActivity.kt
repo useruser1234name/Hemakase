@@ -118,8 +118,7 @@ class MainActivity : ComponentActivity() {
                     }
 
                     Screen.Dashboard -> {
-                        // 임시 대시보드 화면 (나중에 교체 가능)
-//                        DashboardScreen()
+                        DashboardScreen()
                     }
                 }
             }
