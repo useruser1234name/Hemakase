@@ -62,6 +62,7 @@ dependencies {
     debugImplementation(libs.androidx.ui.tooling)
     debugImplementation(libs.androidx.ui.test.manifest)
 
+    implementation ("androidx.compose.foundation:foundation:1.4.3")
     implementation ("com.google.firebase:firebase-auth-ktx")
     implementation ("com.google.firebase:firebase-firestore-ktx")
     implementation("com.google.android.gms:play-services-auth:21.3.0")
@@ -73,5 +74,10 @@ dependencies {
     // Jetpack Lifecycle (ViewModel 등)
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.6.0")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.6.0")
+
+    //카메라
+    implementation ("androidx.activity:activity-compose:1.7.2")
+    implementation ("io.coil-kt:coil-compose:2.3.0")
+
 
 }

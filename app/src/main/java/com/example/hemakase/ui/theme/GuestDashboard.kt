@@ -1,7 +1,8 @@
-@file:OptIn(ExperimentalMaterial3Api::class)
+@file:OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 
 package com.example.hemakase.ui.theme
 
+import android.util.Log
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
@@ -24,11 +25,61 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.*
 import com.example.hemakase.R
+import com.example.hemakase.navigator.DashboardBottomBar
+import java.time.LocalDate
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.hemakase.viewmodel.RegisterViewModel
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.firestore.FirebaseFirestore
+import kotlinx.coroutines.tasks.await
 
-
-@OptIn(ExperimentalMaterial3Api::class)
+@Preview(showBackground = true)
 @Composable
-fun DashboardScreen() {
+fun DashboardcreenPreview() {
+    DashboardScreen()
+}
+
+
+@Composable
+fun DashboardScreen(registerViewModel: RegisterViewModel = viewModel()) {
+
+    val today = LocalDate.now()
+    var selectedMonth by remember { mutableStateOf(today.monthValue) }
+    var selectedYear by remember { mutableStateOf(today.year) }
+    var selectedDay by remember { mutableStateOf<Int?>(null) }
+    var selectedTime by remember { mutableStateOf("") }
+    var showBookingUI by remember { mutableStateOf(false) }
+    var showDialog by remember { mutableStateOf(false) }
+    val scrollState = rememberScrollState()
+
+    val db = FirebaseFirestore.getInstance()
+    val auth = FirebaseAuth.getInstance()
+    var salonName by remember { mutableStateOf("") }
+    var stylistName by remember { mutableStateOf("") }
+
+    LaunchedEffect(showDialog) {
+        if (showDialog) {
+            try {
+                val uid = auth.currentUser?.uid ?: return@LaunchedEffect
+                val userDoc = db.collection("users").document(uid).get().await()
+                val userData = userDoc.data
+                val salonId = userData?.get("salonId") as? String
+                stylistName = userData?.get("name") as? String ?: ""
+
+                salonId?.let {
+                    val salonDoc = db.collection("salons").document(it).get().await()
+                    salonName = salonDoc.getString("name") ?: ""
+                }
+            } catch (e: Exception) {
+                Log.e("Dialog", "Firestore Error: ${e.message}")
+            }
+        }
+    }
+
     Scaffold(
         containerColor = Color.White,
         topBar = { DashboardTopBar() },
@@ -56,14 +107,112 @@ fun DashboardScreen() {
                 .fillMaxSize()
                 .systemBarsPadding()
                 .padding(innerPadding)
+                .verticalScroll(scrollState)
                 .padding(horizontal = 20.dp, vertical = 8.dp)
         ) {
             NextClientSection()
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            // (2) Calendar 섹션
-            CustomCalendarUI()
+            CustomCalendarUI(
+                selectedMonth = selectedMonth,
+                selectedYear = selectedYear,
+                selectedDay = selectedDay,
+                onDaySelected = {
+                    selectedDay = it
+                    selectedTime = ""
+                    showBookingUI = true
+                },
+                onMonthChange = { selectedMonth = it },
+                onYearChange = { selectedYear = it }
+            )
+
+            if (showBookingUI && selectedDay != null) {
+                val timeSlots = listOf("10:00", "11:00", "12:00", "13:00", "14:00",
+                    "15:00", "16:00", "17:00", "18:00", "19:00")
+
+                Column(modifier = Modifier
+                    .padding(top = 20.dp)
+                    .fillMaxWidth()
+                    .background(Color(0xFFF8F8F8), RoundedCornerShape(8.dp))
+                    .padding(16.dp)
+                ) {
+                    Text(
+                        text = "예약 시간 선택",
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 16.sp,
+                        color = Color.Black
+                    )
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    @OptIn(ExperimentalLayoutApi::class)
+                    FlowRow(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        timeSlots.forEach { time ->
+                            OutlinedButton(
+                                onClick = { selectedTime = time },
+                                colors = ButtonDefaults.outlinedButtonColors(
+                                    containerColor = if (selectedTime == time) Color.Black else Color.White,
+                                    contentColor = if (selectedTime == time) Color.White else Color.Black
+                                ),
+                                shape = RoundedCornerShape(50),
+                                border = BorderStroke(1.dp, Color.Black)
+                            ) {
+                                Text(time)
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    Button(
+                        onClick = { showDialog = true },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color.Black),
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        Text("예약 확인", color = Color.White)
+                    }
+                }
+            }
+
+            if (showDialog) {
+                AlertDialog(
+                    onDismissRequest = { showDialog = false },
+                    title = {
+                        Text(
+                            text = "예약 확인",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 18.sp,
+                            color = Color.Black
+                        )
+                    },
+                    text = {
+                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text("날짜: ${selectedYear}년 ${selectedMonth}월 ${selectedDay}일", color = Color.Black)
+                            Text("시간: $selectedTime", color = Color.Black)
+                            Text("미용실: $salonName", color = Color.Black)
+                            Text("미용사: $stylistName", color = Color.Black)
+                        }
+                    },
+                    confirmButton = {
+                        TextButton(onClick = { showDialog = false }) {
+                            Text("확정", color = Color.Black)
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { showDialog = false }) {
+                            Text("취소", color = Color.Gray)
+                        }
+                    },
+                    containerColor = Color(0xFFFDFDFD),
+                    shape = RoundedCornerShape(16.dp)
+                )
+            }
 
             Row(
                 modifier = Modifier
@@ -238,25 +387,37 @@ fun NextClientSection() {
 // (C) Calendar 섹션
 // ─────────────────────────────────────────────────────
 @Composable
-fun CustomCalendarUI() {
-    // 현재 월 (1~12)
-    var currentMonth by remember { mutableStateOf(1) }
+fun CustomCalendarUI(
+    selectedMonth: Int,
+    selectedYear: Int,
+    selectedDay: Int?,
+    onDaySelected: (Int) -> Unit,
+    onMonthChange: (Int) -> Unit,
+    onYearChange: (Int) -> Unit
+) {
+
     // 현재 월의 최대 날짜: 2월=28, 4·6·9·11=30, 그 외=31
-    val validDays = when (currentMonth) {
-        2 -> 28
+    val validDays = when (selectedMonth) {
+        2 -> if ((selectedYear % 4 == 0 && selectedYear % 100 != 0) || selectedYear % 400 == 0) 29 else 28
         in listOf(4, 6, 9, 11) -> 30
         else -> 31
     }
 
-    // 총 42칸(6주) 표시
-    val totalCells = 42
-    // 1..42
-    val days = (1..totalCells).toList()
-    // 7개씩 잘라서 주 단위로
-    val weeks = days.chunked(7)
+    val today = LocalDate.now()
+    val isThisMonth = today.monthValue == selectedMonth && today.year == selectedYear
 
-    // 선택된 날짜 (기본값 11)
-    var selectedDay by remember { mutableStateOf(11) }
+    val firstDayOfMonth = LocalDate.of(selectedYear, selectedMonth, 1)
+    val startDayOfWeek = (firstDayOfMonth.dayOfWeek.value + 6) % 7 // Monday=0 ~ Sunday=6
+
+    val dayCells = (1..validDays).map { it.toString() }
+    val leadingBlanks = List(startDayOfWeek) { "" }
+    val totalCells = 42
+    val trailingBlanks = List(totalCells - (leadingBlanks.size + dayCells.size)) { "" }
+
+    val calendarCells = leadingBlanks + dayCells + trailingBlanks
+    val weeks = calendarCells.chunked(7)
+
+    val selectedDayVal = selectedDay
 
     Column(
         modifier = Modifier
@@ -273,9 +434,12 @@ fun CustomCalendarUI() {
                 fontWeight = FontWeight.Medium,
                 fontSize = 17.sp
             )
-            MonthDropdown(selectedMonth = currentMonth) { month ->
-                currentMonth = month
-            }
+            MonthDropdown(
+                selectedMonth = selectedMonth,
+                selectedYear = selectedYear,
+                onMonthSelected = onMonthChange,
+                onYearSelected = onYearChange
+            )
         }
 
         Spacer(modifier = Modifier.height(8.dp))
@@ -288,17 +452,29 @@ fun CustomCalendarUI() {
                 .padding(16.dp)
         ) {
             Column(modifier = Modifier.fillMaxWidth()) {
-                // 요일 헤더 (S, M, T, W, T, F, S)
+                // 요일 헤더 (월~일)
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceEvenly
                 ) {
-                    val dayNames = listOf("S", "M", "T", "W", "T", "F", "S")
-                    dayNames.forEach { dayName ->
+                    val dayNames = listOf("M", "T", "W", "T", "F", "S", "S")
+
+                    val dayColors = listOf(
+                        Color.Black,  // Monday
+                        Color.Black,  // Tuesday
+                        Color.Black,  // Wednesday
+                        Color.Black,  // Thursday
+                        Color.Black,  // Friday
+                        Color.Blue,   // Saturday
+                        Color.Red     // Sunday
+                    )
+
+                    dayNames.forEachIndexed { index, dayName ->
                         Text(
                             text = dayName,
                             fontSize = 12.sp,
                             textAlign = TextAlign.Center,
+                            color = dayColors[index],
                             modifier = Modifier.weight(1f)
                         )
                     }
@@ -313,39 +489,49 @@ fun CustomCalendarUI() {
                         horizontalArrangement = Arrangement.SpaceEvenly
                     ) {
                         week.forEach { day ->
-                            // 현재 달 유효 날짜인지 체크
-                            val isValid = day <= validDays
-                            // 유효하지 않은 날짜 -> 다음 달 날짜( day - validDays ), 여기선 배경 투명
-                            val displayText = if (isValid) "$day" else "${day - validDays}"
+                            val isValid = day.isNotBlank()
+                            val dayNumber = day.toIntOrNull()
+                            val isSelected = isValid && dayNumber == selectedDay
+                            val isToday = isValid && isThisMonth && dayNumber == today.dayOfMonth
 
                             Box(
                                 modifier = Modifier
                                     .weight(1f)
                                     .aspectRatio(1f)
                                     .padding(4.dp)
-                                    // 유효한 날짜 + 선택된 날짜만 검정 배경
                                     .background(
-                                        if (isValid && day == selectedDay) Color.Black
-                                        else Color.Transparent
+                                        if (isSelected) Color.Black else Color.Transparent
                                     )
-                                    // 유효 날짜만 클릭 가능
-                                    .then(
-                                        if (isValid) Modifier.clickable { selectedDay = day }
-                                        else Modifier
-                                    ),
+                                    .then(if (isValid) Modifier.clickable { onDaySelected(dayNumber!!) } else Modifier),
                                 contentAlignment = Alignment.Center
                             ) {
-                                Text(
-                                    text = displayText,
-                                    fontSize = 14.sp,
-                                    // 유효하지 않은 날짜면 Gray 텍스트, 유효+선택이면 White, 그 외 Black
-                                    color = when {
-                                        !isValid -> Color.Gray
-                                        day == selectedDay -> Color.White
-                                        else -> Color.Black
-                                    },
-                                    textAlign = TextAlign.Center
-                                )
+                                Column(
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.Center
+                                ) {
+                                    Text(
+                                        text = day,
+                                        fontSize = 14.sp,
+                                        color = when {
+                                            !isValid -> Color.Gray
+                                            isSelected -> Color.White
+                                            else -> Color.Black
+                                        },
+                                        textAlign = TextAlign.Center
+                                    )
+                                    if (isToday) {
+                                        Box(
+                                            modifier = Modifier
+                                                .padding(top = 2.dp)
+                                                .height(2.dp)
+                                                .width(20.dp)
+                                                .background(
+                                                    Color.Red,
+                                                    shape = RoundedCornerShape(1.dp)
+                                                )
+                                        )
+                                    }
+                                }
                             }
                         }
                     }
@@ -357,71 +543,64 @@ fun CustomCalendarUI() {
 }
 
 @Composable
-fun MonthDropdown(selectedMonth: Int, onMonthSelected: (Int) -> Unit) {
-    var expanded by remember { mutableStateOf(false) }
-    Box {
-        Row(
-            modifier = Modifier
-                .clickable { expanded = true }
-                .padding(8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(text = "$selectedMonth 월", fontSize = 14.sp)
-            Icon(
-                imageVector = Icons.Default.KeyboardArrowDown,
-                contentDescription = "Select Month",
-                modifier = Modifier.size(20.dp)
-            )
-        }
-        DropdownMenu(
-            expanded = expanded,
-            onDismissRequest = { expanded = false }
-        ) {
-            (1..12).forEach { month ->
-                DropdownMenuItem(
-                    text = { Text("$month 월", fontSize = 14.sp) },
-                    onClick = {
-                        onMonthSelected(month)
-                        expanded = false
-                    }
-                )
+fun MonthDropdown(
+    selectedMonth: Int,
+    selectedYear: Int,
+    onMonthSelected: (Int) -> Unit,
+    onYearSelected: (Int) -> Unit
+) {
+    var monthExpanded by remember { mutableStateOf(false) }
+    var yearExpanded by remember { mutableStateOf(false) }
+
+    Row(verticalAlignment = Alignment.CenterVertically) {
+
+        Box {
+            Row(
+                modifier = Modifier
+                    .clickable { yearExpanded = true }
+                    .padding(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("$selectedYear 년", fontSize = 14.sp)
+                Icon(imageVector = Icons.Default.KeyboardArrowDown, contentDescription = null)
+            }
+            DropdownMenu(expanded = yearExpanded, onDismissRequest = { yearExpanded = false }) {
+                val currentYear = LocalDate.now().year
+                ((currentYear - 10)..(currentYear + 10)).forEach {
+                    DropdownMenuItem(
+                        text = { Text("$it 년") },
+                        onClick = {
+                            onYearSelected(it)
+                            yearExpanded = false
+                        }
+                    )
+                }
             }
         }
-    }
-}
 
+        Spacer(modifier = Modifier.width(16.dp))
 
-// ─────────────────────────────────────────────────────
-// (D) 하단 바 (Bottom Navigation)
-// ─────────────────────────────────────────────────────
-@Composable
-fun DashboardBottomBar() {
-    Column {
-        Divider(
-            color = Color.LightGray,
-            thickness = 1.dp
-        )
-        NavigationBar(
-            containerColor = Color.White
-        ) {
-            NavigationBarItem(
-                selected = false,
-                onClick = { /*TODO*/ },
-                icon = { Icon(imageVector = Icons.Default.DateRange, contentDescription = null) },
-                label = { Text("Dashboard") }
-            )
-            NavigationBarItem(
-                selected = false,
-                onClick = { /*TODO*/ },
-                icon = { Icon(imageVector = Icons.Default.Message, contentDescription = null) },
-                label = { Text("Messages") }
-            )
-            NavigationBarItem(
-                selected = false,
-                onClick = { /*TODO*/ },
-                icon = { Icon(imageVector = Icons.Default.Settings, contentDescription = null) },
-                label = { Text("Settings") }
-            )
+        Box {
+            Row(
+                modifier = Modifier
+                    .clickable { monthExpanded = true }
+                    .padding(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("$selectedMonth 월", fontSize = 14.sp)
+                Icon(imageVector = Icons.Default.KeyboardArrowDown, contentDescription = null)
+            }
+            DropdownMenu(expanded = monthExpanded, onDismissRequest = { monthExpanded = false }) {
+                (1..12).forEach {
+                    DropdownMenuItem(
+                        text = { Text("$it 월") },
+                        onClick = {
+                            onMonthSelected(it)
+                            monthExpanded = false
+                        }
+                    )
+                }
+            }
         }
     }
 }
