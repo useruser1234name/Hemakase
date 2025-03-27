@@ -3,27 +3,18 @@
 package com.example.hemakase.ui.theme
 
 import java.text.SimpleDateFormat
-import java.util.Calendar
 import android.util.Log
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.grid.*
-import androidx.compose.foundation.lazy.grid.items
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.filled.Message
-import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.*
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -71,6 +62,7 @@ fun DashboardScreen(registerViewModel: RegisterViewModel = viewModel()) {
     var showDatePicker by remember { mutableStateOf(false) }
     var showTimePicker by remember { mutableStateOf(false) }
     var rescheduleDate by remember { mutableStateOf<java.util.Calendar?>(null) }
+    var isRescheduling by remember { mutableStateOf(false) }
 
     val formattedReservedDate =
         if (reservedYear != null && reservedMonth != null && reservedDay != null) {
@@ -183,7 +175,7 @@ fun DashboardScreen(registerViewModel: RegisterViewModel = viewModel()) {
                 .verticalScroll(scrollState)
                 .padding(horizontal = 20.dp, vertical = 8.dp)
         ) {
-            NextClientSection(
+            Nextmyreservation(
                 customerName = if (customerName.isNotBlank()) customerName else "고객 없음",
                 salonName = if (salonName.isNotBlank()) salonName else "미용실 없음",
                 reservationDate = if (reservedDay != null && reservedMonth != null && reservedYear != null)
@@ -191,6 +183,7 @@ fun DashboardScreen(registerViewModel: RegisterViewModel = viewModel()) {
                 else "예약 없음",
                 reservationTime = if (reservedTime.isNotBlank()) reservedTime else "시간 없음",
                 onRescheduleClick = {
+                    isRescheduling = true
                     showDatePicker = true
                 }
             )
@@ -356,7 +349,7 @@ fun DashboardScreen(registerViewModel: RegisterViewModel = viewModel()) {
         }
 
         // 날짜 선택 다이얼로그
-        if (showDatePicker) {
+        if (showDatePicker && isRescheduling) {
             val now = java.util.Calendar.getInstance()
             android.app.DatePickerDialog(
                 context,
@@ -373,8 +366,8 @@ fun DashboardScreen(registerViewModel: RegisterViewModel = viewModel()) {
             ).show()
         }
 
-// 🔽 시간 선택 다이얼로그
-        if (showTimePicker && rescheduleDate != null) {
+// 시간 선택 다이얼로그
+        if (showTimePicker && rescheduleDate != null && isRescheduling) {
             val now = java.util.Calendar.getInstance()
             android.app.TimePickerDialog(
                 context,
@@ -408,6 +401,7 @@ fun DashboardScreen(registerViewModel: RegisterViewModel = viewModel()) {
                         }
 
                     showTimePicker = false
+                    isRescheduling = false
                 },
                 now.get(java.util.Calendar.HOUR_OF_DAY),
                 now.get(java.util.Calendar.MINUTE),
@@ -451,7 +445,7 @@ fun DashboardTopBar() {
 // (B) Next Client 섹션
 // ─────────────────────────────────────────────────────
 @Composable
-fun NextClientSection(
+fun Nextmyreservation(
     customerName: String,
     salonName: String,
     reservationDate: String,
