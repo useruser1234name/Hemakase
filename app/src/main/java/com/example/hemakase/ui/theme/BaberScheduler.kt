@@ -31,6 +31,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.*
+import com.example.hemakase.navigator.DashboardBottomBar
 
 
 data class Appointment(
@@ -169,8 +170,8 @@ fun AgendaItem(appointment: Appointment) {
 // ─────────────────────────────────────────────────────
 // (E) 미리보기
 // ─────────────────────────────────────────────────────
-@Preview(showBackground = true)
-@Composable
-fun DashboardScreenPreview() {
-    BaberSchedulerScreen()
-}
+//@Preview(showBackground = true)
+//@Composable
+//fun DashboardScreenPreview() {
+//    BaberSchedulerScreen()
+//}
