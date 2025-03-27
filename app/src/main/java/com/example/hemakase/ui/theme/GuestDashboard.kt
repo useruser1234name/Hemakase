@@ -7,8 +7,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.grid.*
-import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -20,12 +18,10 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.*
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.*
 import com.example.hemakase.R
 
@@ -42,7 +38,13 @@ fun DashboardScreen() {
                 onClick = { /*TODO: 새 예약 추가 등*/ },
                 shape = CircleShape,
                 containerColor = Color.Black,
-                contentColor = Color.White
+                contentColor = Color.White,
+                elevation = FloatingActionButtonDefaults.elevation(
+                    defaultElevation = 0.dp,
+                    pressedElevation = 0.dp,
+                    focusedElevation = 0.dp,
+                    hoveredElevation = 0.dp
+                )
             ) {
                 Icon(imageVector = Icons.Default.Add, contentDescription = "Add")
             }
@@ -204,6 +206,7 @@ fun NextClientSection() {
                         .width(1.dp)
                         .fillMaxHeight(0.05f)
                         .background(Color.LightGray)
+                        .padding(top = 18.dp, bottom = 18.dp)
                 )
 
                 Text(
@@ -421,13 +424,4 @@ fun DashboardBottomBar() {
             )
         }
     }
-}
-
-// ─────────────────────────────────────────────────────
-// (E) 미리보기
-// ─────────────────────────────────────────────────────
-@Preview(showBackground = true)
-@Composable
-fun DashboardScreenPreview() {
-    DashboardScreen()
 }
