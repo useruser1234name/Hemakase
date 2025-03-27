@@ -2,12 +2,16 @@
 
 package com.example.hemakase.ui.theme
 
+import java.text.SimpleDateFormat
+import java.util.Calendar
 import android.util.Log
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.grid.*
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -19,10 +23,12 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.*
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.*
 import com.example.hemakase.R
 import com.example.hemakase.navigator.DashboardBottomBar
@@ -31,11 +37,20 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.platform.LocalContext
+import java.util.Locale
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.hemakase.viewmodel.RegisterViewModel
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.tasks.await
+
+@Preview(showBackground = true)
+@Composable
+fun DashboardcreenPreview() {
+    DashboardScreen()
+}
+
 
 @Composable
 fun DashboardScreen(registerViewModel: RegisterViewModel = viewModel()) {
@@ -45,14 +60,92 @@ fun DashboardScreen(registerViewModel: RegisterViewModel = viewModel()) {
     var selectedYear by remember { mutableStateOf(today.year) }
     var selectedDay by remember { mutableStateOf<Int?>(null) }
     var selectedTime by remember { mutableStateOf("") }
+
+    var reservedYear by remember { mutableStateOf<Int?>(null) }
+    var reservedMonth by remember { mutableStateOf<Int?>(null) }
+    var reservedDay by remember { mutableStateOf<Int?>(null) }
+    var reservedTime by remember { mutableStateOf("") }
+
     var showBookingUI by remember { mutableStateOf(false) }
     var showDialog by remember { mutableStateOf(false) }
-    val scrollState = rememberScrollState()
+    var showDatePicker by remember { mutableStateOf(false) }
+    var showTimePicker by remember { mutableStateOf(false) }
+    var rescheduleDate by remember { mutableStateOf<java.util.Calendar?>(null) }
 
+    val formattedReservedDate =
+        if (reservedYear != null && reservedMonth != null && reservedDay != null) {
+            formatReservationDate(reservedYear!!, reservedMonth!!, reservedDay!!)
+        } else {
+            "예약 없음"
+        }
+
+
+    val scrollState = rememberScrollState()
     val db = FirebaseFirestore.getInstance()
     val auth = FirebaseAuth.getInstance()
+
     var salonName by remember { mutableStateOf("") }
     var stylistName by remember { mutableStateOf("") }
+    var salonId by remember { mutableStateOf<String?>(null) }
+    var customerName by remember { mutableStateOf("") }
+    var customerPhoto by remember { mutableStateOf<String?>(null) }
+
+    val context = LocalContext.current
+
+    // 앱 시작 시 가장 가까운 예약 정보 불러오기
+    LaunchedEffect(Unit) {
+        try {
+            val uid = auth.currentUser?.uid ?: return@LaunchedEffect
+            Log.d("예약불러오기", "현재 uid: $uid")
+
+            val snapshot = db.collection("reservations")
+                .whereEqualTo("customer_id", uid)
+                .orderBy("date") // 날짜 기준 정렬
+                .limit(1)
+                .get()
+                .await()
+
+            if (!snapshot.isEmpty) {
+                val reservation = snapshot.documents[0]
+                val timestamp = reservation.getTimestamp("date")?.toDate()
+
+                if (timestamp != null) {
+                    val calendar = java.util.Calendar.getInstance()
+                    calendar.time = timestamp
+
+                    reservedYear = calendar.get(java.util.Calendar.YEAR)
+                    reservedMonth = calendar.get(java.util.Calendar.MONTH) + 1
+                    reservedDay = calendar.get(java.util.Calendar.DAY_OF_MONTH)
+                    reservedTime = SimpleDateFormat("HH:mm", Locale.KOREAN).format(timestamp)
+
+                    Log.d(
+                        "예약불러오기",
+                        "불러온 예약: $reservedYear-$reservedMonth-$reservedDay $reservedTime"
+                    )
+                } else {
+                    Log.e("예약불러오기", "timestamp null! date 필드가 Timestamp 형식인지 확인하세요.")
+                }
+
+                // 예약 정보에서 나머지 필드 추출
+                customerName = reservation.getString("customer_name") ?: ""
+                customerPhoto = reservation.getString("customer_photo")
+
+                // 미용실 이름 가져오기
+                val salonIdFromRes = reservation.getString("salonId")
+                salonIdFromRes?.let {
+                    val salonDoc = db.collection("salons").document(it).get().await()
+                    salonName = salonDoc.getString("name") ?: ""
+                }
+            } else {
+                Log.w("예약불러오기", "예약이 없습니다.")
+            }
+
+        } catch (e: Exception) {
+            Log.e("예약불러오기", "에러 발생: ${e.message}")
+        }
+    }
+
+
 
     LaunchedEffect(showDialog) {
         if (showDialog) {
@@ -60,8 +153,11 @@ fun DashboardScreen(registerViewModel: RegisterViewModel = viewModel()) {
                 val uid = auth.currentUser?.uid ?: return@LaunchedEffect
                 val userDoc = db.collection("users").document(uid).get().await()
                 val userData = userDoc.data
-                val salonId = userData?.get("salonId") as? String
+                salonId = userData?.get("salonId") as? String
                 stylistName = userData?.get("name") as? String ?: ""
+                customerName = userData?.get("name") as? String ?: ""
+                customerPhoto = userData?.get("photo") as? String
+
 
                 salonId?.let {
                     val salonDoc = db.collection("salons").document(it).get().await()
@@ -77,24 +173,8 @@ fun DashboardScreen(registerViewModel: RegisterViewModel = viewModel()) {
         containerColor = Color.White,
         topBar = { DashboardTopBar() },
         bottomBar = { DashboardBottomBar() },
-        floatingActionButton = {
-            FloatingActionButton(
-                onClick = { /*TODO: 새 예약 추가 등*/ },
-                shape = CircleShape,
-                containerColor = Color.Black,
-                contentColor = Color.White,
-                elevation = FloatingActionButtonDefaults.elevation(
-                    defaultElevation = 0.dp,
-                    pressedElevation = 0.dp,
-                    focusedElevation = 0.dp,
-                    hoveredElevation = 0.dp
-                )
-            ) {
-                Icon(imageVector = Icons.Default.Add, contentDescription = "Add")
-            }
-        },
-        floatingActionButtonPosition = FabPosition.End,
-    ) { innerPadding ->
+
+        ) { innerPadding ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -103,7 +183,17 @@ fun DashboardScreen(registerViewModel: RegisterViewModel = viewModel()) {
                 .verticalScroll(scrollState)
                 .padding(horizontal = 20.dp, vertical = 8.dp)
         ) {
-            NextClientSection()
+            NextClientSection(
+                customerName = if (customerName.isNotBlank()) customerName else "고객 없음",
+                salonName = if (salonName.isNotBlank()) salonName else "미용실 없음",
+                reservationDate = if (reservedDay != null && reservedMonth != null && reservedYear != null)
+                    formatReservationDate(reservedYear!!, reservedMonth!!, reservedDay!!)
+                else "예약 없음",
+                reservationTime = if (reservedTime.isNotBlank()) reservedTime else "시간 없음",
+                onRescheduleClick = {
+                    showDatePicker = true
+                }
+            )
 
             Spacer(modifier = Modifier.height(24.dp))
 
@@ -121,14 +211,17 @@ fun DashboardScreen(registerViewModel: RegisterViewModel = viewModel()) {
             )
 
             if (showBookingUI && selectedDay != null) {
-                val timeSlots = listOf("10:00", "11:00", "12:00", "13:00", "14:00",
-                    "15:00", "16:00", "17:00", "18:00", "19:00")
+                val timeSlots = listOf(
+                    "10:00", "11:00", "12:00", "13:00", "14:00",
+                    "15:00", "16:00", "17:00", "18:00", "19:00"
+                )
 
-                Column(modifier = Modifier
-                    .padding(top = 20.dp)
-                    .fillMaxWidth()
-                    .background(Color(0xFFF8F8F8), RoundedCornerShape(8.dp))
-                    .padding(16.dp)
+                Column(
+                    modifier = Modifier
+                        .padding(top = 20.dp)
+                        .fillMaxWidth()
+                        .background(Color(0xFFF8F8F8), RoundedCornerShape(8.dp))
+                        .padding(16.dp)
                 ) {
                     Text(
                         text = "예약 시간 선택",
@@ -186,16 +279,70 @@ fun DashboardScreen(registerViewModel: RegisterViewModel = viewModel()) {
                     },
                     text = {
                         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                            Text("날짜: ${selectedYear}년 ${selectedMonth}월 ${selectedDay}일", color = Color.Black)
+                            Text(
+                                "날짜: ${selectedYear}년 ${selectedMonth}월 ${selectedDay}일",
+                                color = Color.Black
+                            )
                             Text("시간: $selectedTime", color = Color.Black)
                             Text("미용실: $salonName", color = Color.Black)
                             Text("미용사: $stylistName", color = Color.Black)
                         }
                     },
                     confirmButton = {
-                        TextButton(onClick = { showDialog = false }) {
+                        TextButton(
+                            onClick = {
+                                val uid = auth.currentUser?.uid ?: return@TextButton
+
+                                try {
+                                    // 예약 시간 문자열: 예 "2025-03-29 15:00"
+                                    val reservationTime =
+                                        "$selectedYear-${"%02d".format(selectedMonth)}-${
+                                            "%02d".format(selectedDay)
+                                        } $selectedTime"
+
+                                    // 문자열 → Date → Timestamp 변환
+                                    val formatter = java.text.SimpleDateFormat(
+                                        "yyyy-MM-dd HH:mm",
+                                        java.util.Locale.KOREAN
+                                    )
+                                    val parsedDate = formatter.parse(reservationTime)
+                                    val timestamp = com.google.firebase.Timestamp(parsedDate!!)
+
+                                    // 예약 정보 맵 생성
+                                    val reservation = hashMapOf(
+                                        "customer_id" to uid,
+                                        "customer_name" to customerName,
+                                        "customer_photo" to customerPhoto,
+                                        "stylist_id" to uid, // 추후 stylist 선택 가능
+                                        "date" to timestamp, // Timestamp 타입으로 저장
+                                        "status" to "pending",
+                                        "style" to "",
+                                        "note" to "",
+                                        "reference_photo" to null,
+                                        "salonId" to salonId
+                                    )
+
+                                    // Firestore 저장
+                                    db.collection("reservations")
+                                        .add(reservation)
+                                        .addOnSuccessListener {
+                                            Log.d("Firestore", "예약 저장 성공")
+                                        }
+                                        .addOnFailureListener { e ->
+                                            Log.e("Firestore", "예약 저장 실패: ${e.message}")
+                                        }
+
+                                    showDialog = false
+
+                                } catch (e: Exception) {
+                                    Log.e("예약 오류", "날짜 파싱 오류: ${e.message}")
+                                }
+                            }
+
+                        ) {
                             Text("확정", color = Color.Black)
                         }
+
                     },
                     dismissButton = {
                         TextButton(onClick = { showDialog = false }) {
@@ -206,16 +353,68 @@ fun DashboardScreen(registerViewModel: RegisterViewModel = viewModel()) {
                     shape = RoundedCornerShape(16.dp)
                 )
             }
-
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 20.dp),
-                horizontalArrangement = Arrangement.End
-            ) {
-                Text("● Current date    ○ My client")
-            }
         }
+
+        // 날짜 선택 다이얼로그
+        if (showDatePicker) {
+            val now = java.util.Calendar.getInstance()
+            android.app.DatePickerDialog(
+                context,
+                { _, year, month, day ->
+                    rescheduleDate = java.util.Calendar.getInstance().apply {
+                        set(year, month, day)
+                    }
+                    showDatePicker = false
+                    showTimePicker = true // 날짜 선택 후 시간 선택으로 이동
+                },
+                now.get(java.util.Calendar.YEAR),
+                now.get(java.util.Calendar.MONTH),
+                now.get(java.util.Calendar.DAY_OF_MONTH)
+            ).show()
+        }
+
+// 🔽 시간 선택 다이얼로그
+        if (showTimePicker && rescheduleDate != null) {
+            val now = java.util.Calendar.getInstance()
+            android.app.TimePickerDialog(
+                context,
+                { _, hour, minute ->
+                    rescheduleDate?.apply {
+                        set(java.util.Calendar.HOUR_OF_DAY, hour)
+                        set(java.util.Calendar.MINUTE, minute)
+                    }
+
+                    // 🔁 Firebase 예약 업데이트
+                    val uid = auth.currentUser?.uid ?: return@TimePickerDialog
+                    val newTimestamp = com.google.firebase.Timestamp(rescheduleDate!!.time)
+
+                    db.collection("reservations")
+                        .whereEqualTo("customer_id", uid)
+                        .orderBy("date")
+                        .limit(1)
+                        .get()
+                        .addOnSuccessListener { snapshot ->
+                            if (!snapshot.isEmpty) {
+                                val docRef = snapshot.documents[0].reference
+                                docRef.update("date", newTimestamp)
+                                    .addOnSuccessListener {
+                                        Log.d("Firestore", "예약 시간 수정 완료")
+                                        reservedYear = rescheduleDate!!.get(java.util.Calendar.YEAR)
+                                        reservedMonth = rescheduleDate!!.get(java.util.Calendar.MONTH) + 1
+                                        reservedDay = rescheduleDate!!.get(java.util.Calendar.DAY_OF_MONTH)
+                                        reservedTime = SimpleDateFormat("HH:mm", Locale.KOREAN).format(rescheduleDate!!.time)
+                                    }
+                            }
+                        }
+
+                    showTimePicker = false
+                },
+                now.get(java.util.Calendar.HOUR_OF_DAY),
+                now.get(java.util.Calendar.MINUTE),
+                true
+            ).show()
+        }
+
     }
 }
 
@@ -252,8 +451,13 @@ fun DashboardTopBar() {
 // (B) Next Client 섹션
 // ─────────────────────────────────────────────────────
 @Composable
-fun NextClientSection() {
-
+fun NextClientSection(
+    customerName: String,
+    salonName: String,
+    reservationDate: String,
+    reservationTime: String,
+    onRescheduleClick: () -> Unit
+) {
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -283,7 +487,7 @@ fun NextClientSection() {
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        text = "John.K",
+                        text = customerName,
                         color = Color.Gray,
                         fontSize = 15.sp
                     )
@@ -301,7 +505,7 @@ fun NextClientSection() {
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        text = "Mon, Aug 12",
+                        text = reservationDate,
                         color = Color.Gray,
                         fontSize = 15.sp
                     )
@@ -319,7 +523,7 @@ fun NextClientSection() {
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        text = "1 PM",
+                        text = reservationTime,
                         color = Color.Gray,
                         fontSize = 15.sp
                     )
@@ -337,7 +541,23 @@ fun NextClientSection() {
                 horizontalArrangement = Arrangement.SpaceEvenly
             ) {
                 Text(
-                    text = "Reschedule",
+                    text = "Reschedule", //예약 수정
+                    fontSize = 14.sp,
+                    color = Color.Black,
+                    modifier = Modifier.clickable { onRescheduleClick() } //콜백 호출
+
+                )
+ //
+                // 세로 Divider
+                Box(
+                    modifier = Modifier
+                        .width(1.dp)
+                        .fillMaxHeight(0.05f)
+                        .background(Color.LightGray)
+                )
+
+                Text(
+                    text = "cancel", // 예약 취소
                     fontSize = 14.sp,
                     color = Color.Black
                 )
@@ -348,25 +568,10 @@ fun NextClientSection() {
                         .width(1.dp)
                         .fillMaxHeight(0.05f)
                         .background(Color.LightGray)
-                        .padding(top = 18.dp, bottom = 18.dp)
                 )
 
                 Text(
-                    text = "Add Service",
-                    fontSize = 14.sp,
-                    color = Color.Black
-                )
-
-                // 세로 Divider
-                Box(
-                    modifier = Modifier
-                        .width(1.dp)
-                        .fillMaxHeight(0.05f)
-                        .background(Color.LightGray)
-                )
-
-                Text(
-                    text = "Add Note",
+                    text = "Add Note", //요청사항 수정
                     fontSize = 14.sp,
                     color = Color.Black
                 )
@@ -596,4 +801,13 @@ fun MonthDropdown(
             }
         }
     }
+}
+
+fun formatReservationDate(year: Int, month: Int, day: Int): String {
+    val calendar = java.util.Calendar.getInstance()
+    calendar.set(year, month - 1, day) // Calendar는 0부터 시작해서 month-1
+
+    val date = calendar.time
+    val formatter = java.text.SimpleDateFormat("EEE, MMM dd", java.util.Locale.ENGLISH)
+    return formatter.format(date) // 예: "Mon, Aug 12"
 }
