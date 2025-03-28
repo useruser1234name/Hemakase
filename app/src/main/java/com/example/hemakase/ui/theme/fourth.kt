@@ -1,5 +1,6 @@
 package com.example.hemakase.ui.theme
 
+import android.widget.Toast
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -18,164 +19,47 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.PathEffect
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.hemakase.R
 import com.example.hemakase.viewmodel.RegisterViewModel
+import com.google.firebase.firestore.ktx.firestore
+import com.google.firebase.ktx.Firebase
 
-@Preview(showBackground = true)
-@Composable
-fun HairshopScreenPreview() {
-    HairshopScreen()
-}
+// 데이터 모델
+data class SalonItem(val id: String, val name: String)
+data class StylistItem(val id: String, val name: String)
 
 @Composable
 fun HairshopScreen(
     onFinishRegistration: () -> Unit = {},
     registerViewModel: RegisterViewModel = viewModel()
 ) {
-
     val context = LocalContext.current
 
-    var selectedShop by remember { mutableStateOf("미용실 선택") }
-    val salonIdMap = mapOf( // 샘플 미용실 리스트 → 실제로는 DB에서 불러오면 더 좋아요
-        "헤어샵 A" to "salon_a_id",
-        "헤어샵 B" to "salon_b_id",
-        "헤어샵 C" to "salon_c_id"
-    )
-
-    val selectedSalonId = salonIdMap[selectedShop] ?: ""
-
+    var selectedSalonId by remember { mutableStateOf("") }
+    var selectedStylistName by remember { mutableStateOf("") }
+    var selectedStylistId by remember { mutableStateOf("") }
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .systemBarsPadding() // Column 자체에는 systemBarsPadding만 적용
+            .systemBarsPadding()
     ) {
         TopBarWithBackArrow()
 
         Spacer(modifier = Modifier.height(32.dp))
 
         Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(20.dp),
+            modifier = Modifier.fillMaxWidth().padding(20.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // 단계 아이콘 Row
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 8.dp)
-                    .drawBehind {
-                        val strokeWidth = 2.dp.toPx()
-                        val centerY = size.height / 2
-                        val startX = 24.dp.toPx()
-                        val endX = size.width - 24.dp.toPx()
-
-                        drawLine(
-                            color = Color.Gray,
-                            start = Offset(startX, centerY),
-                            end = Offset(endX, centerY),
-                            strokeWidth = strokeWidth
-                        )
-                    },
-                horizontalArrangement = Arrangement.SpaceEvenly
-            ) {
-                // (1) 첫 번째 아이콘
-                Box(
-                    modifier = Modifier
-                        .size(48.dp)
-                        .clip(CircleShape)
-                        .background(Color(0xFFF4F4F4))
-                ) {
-                    Image(
-                        painter = painterResource(id = R.drawable.first),
-                        contentDescription = "Step 1",
-                        modifier = Modifier
-                            .size(20.dp)
-                            .align(Alignment.Center),
-                        contentScale = ContentScale.Crop
-                    )
-                }
-
-                // (2) 두 번째 아이콘
-                Box(
-                    modifier = Modifier
-                        .size(48.dp)
-                        .clip(CircleShape)
-                        .background(Color(0xFFF4F4F4))
-                ) {
-                    Image(
-                        painter = painterResource(id = R.drawable.second),
-                        contentDescription = "Step 2",
-                        modifier = Modifier
-                            .size(20.dp)
-                            .align(Alignment.Center),
-                        contentScale = ContentScale.Crop
-                    )
-                }
-
-                // (3) 세 번째 아이콘
-                Box(
-                    modifier = Modifier
-                        .size(48.dp)
-                        .clip(CircleShape)
-                        .background(Color(0xFFF4F4F4))
-                        .border(1.dp, shape = CircleShape, color = Color.Black)
-                ) {
-                    Image(
-                        painter = painterResource(id = R.drawable.choicethird),
-                        contentDescription = "Step 3",
-                        modifier = Modifier
-                            .size(20.dp)
-                            .align(Alignment.Center),
-                        contentScale = ContentScale.Crop
-                    )
-                }
-
-                // (4) 네 번째 아이콘
-                Box(
-                    modifier = Modifier
-                        .size(48.dp)
-                        .clip(CircleShape)
-                        .background(Color(0xFFF4F4F4))
-                ) {
-                    Image(
-                        painter = painterResource(id = R.drawable.fourth),
-                        contentDescription = "Step 4",
-                        modifier = Modifier
-                            .size(20.dp)
-                            .align(Alignment.Center),
-                        contentScale = ContentScale.Crop
-                    )
-                }
-
-                // (5) 다섯 번째 아이콘
-                Box(
-                    modifier = Modifier
-                        .size(48.dp)
-                        .clip(CircleShape)
-                        .background(Color(0xFFF4F4F4))
-                ) {
-                    Image(
-                        painter = painterResource(id = R.drawable.fifth),
-                        contentDescription = "Step 5",
-                        modifier = Modifier
-                            .size(20.dp)
-                            .align(Alignment.Center),
-                        contentScale = ContentScale.Crop
-                    )
-                }
-            }
+            StepProgressBar()
         }
 
         Spacer(modifier = Modifier.height(32.dp))
@@ -189,17 +73,22 @@ fun HairshopScreen(
 
         Spacer(modifier = Modifier.height(33.dp))
 
-        // ─────────────────────────────────────────────────
-        // (중요) 여기서부터 "미용실 선택" 드롭다운 UI 추가
-        // ─────────────────────────────────────────────────
-        HairshopSelectionArea()
+        // 드롭다운 UI (미용실 + 미용사)
+        HairshopSelectionArea(
+            onSelectionChanged = { salonId, stylistId, stylistName ->
+                selectedSalonId = salonId
+                selectedStylistId = stylistId
+                selectedStylistName = stylistName            }
+        )
 
-        // Spacer로 남은 공간을 채워서 버튼을 맨 아래로 내림
         Spacer(modifier = Modifier.weight(1f))
 
-        // 버튼 (맨 아래)
         Button(
             onClick = {
+                if (selectedSalonId.isBlank() || selectedStylistId.isBlank()) {
+                    Toast.makeText(context, "미용실과 미용사를 모두 선택해주세요.", Toast.LENGTH_SHORT).show()
+                    return@Button
+                }
                 registerViewModel.registerUser(
                     context = context,
                     name = registerViewModel.tempName,
@@ -207,14 +96,13 @@ fun HairshopScreen(
                     address = registerViewModel.tempAddress,
                     isHairdresser = registerViewModel.tempIsHairdresser,
                     profileUri = registerViewModel.tempProfileUri,
-                    selectedSalonId = selectedSalonId
+                    selectedSalonId = selectedSalonId,
+                    selectedStylistId = selectedStylistId,
+                    selectedStylistName = selectedStylistName
                 )
                 onFinishRegistration()
             },
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 20.dp)
-                .height(60.dp),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp).height(60.dp),
             shape = RoundedCornerShape(5.dp),
             colors = ButtonDefaults.buttonColors(
                 containerColor = Color.White,
@@ -222,65 +110,83 @@ fun HairshopScreen(
             ),
             border = BorderStroke(1.dp, Color.Black)
         ) {
-            Text(
-                text = "Next",
-                fontSize = 17.sp,
-                fontWeight = FontWeight.Medium
-            )
+            Text("Next", fontSize = 17.sp, fontWeight = FontWeight.Medium)
         }
     }
 }
-
-/**
- * "미용실 선택"과 "미용사 선택"을 드롭다운으로 구성한 예시
- */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun HairshopSelectionArea() {
-    // 첫 번째 드롭다운: 미용실 선택
-    var expandedShop by remember { mutableStateOf(false) }
-    var selectedShop by remember { mutableStateOf("미용실 선택") }
-    val shopList = listOf("헤어샵 A", "헤어샵 B", "헤어샵 C")
+fun HairshopSelectionArea(
+    onSelectionChanged: (String, String, String) -> Unit
+) {
+    val db = Firebase.firestore
 
-    // 두 번째 드롭다운: 미용사 선택
-    var expandedHairdresser by remember { mutableStateOf(false) }
-    var selectedHairdresser by remember { mutableStateOf("미용사 선택") }
-    val hairdresserList = listOf("김철수", "박영희", "이민수")
+    var salonList by remember { mutableStateOf<List<SalonItem>>(emptyList()) }
+    var stylistList by remember { mutableStateOf<List<StylistItem>>(emptyList()) }
 
-    // Column으로 두 개의 드롭다운을 위아래로 배치
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 20.dp)
-    ) {
+    var selectedSalon by remember { mutableStateOf<SalonItem?>(null) }
+    var selectedStylist by remember { mutableStateOf<StylistItem?>(null) }
+
+    var expandedSalon by remember { mutableStateOf(false) }
+    var expandedStylist by remember { mutableStateOf(false) }
+
+    // 미용실 목록 불러오기
+    LaunchedEffect(Unit) {
+        db.collection("salons").get().addOnSuccessListener { result ->
+            salonList = result.documents.mapNotNull {
+                val id = it.id
+                val name = it.getString("name") ?: return@mapNotNull null
+                SalonItem(id, name)
+            }
+        }
+    }
+
+    // 미용실 선택 시 미용사 리스트 로드
+    LaunchedEffect(selectedSalon) {
+        selectedSalon?.let { salon ->
+            db.collection("users")
+                .whereEqualTo("role", "stylist")
+                .whereEqualTo("salonId", salon.id)
+                .get()
+                .addOnSuccessListener { result ->
+                    stylistList = result.documents.mapNotNull {
+                        val id = it.getString("id") ?: return@mapNotNull null
+                        val name = it.getString("name") ?: return@mapNotNull null
+                        StylistItem(id, name)
+                    }
+                }
+        }
+    }
+
+    Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp)) {
+        // 미용실 드롭다운
         ExposedDropdownMenuBox(
-            expanded = expandedShop,
-            onExpandedChange = { expandedShop = !expandedShop }
+            expanded = expandedSalon,
+            onExpandedChange = { expandedSalon = !expandedSalon }
         ) {
             OutlinedTextField(
-                value = selectedShop,
+                value = selectedSalon?.name ?: "미용실 선택",
                 onValueChange = {},
-                label = { Text("") },
+                readOnly = true,
                 trailingIcon = {
-                    val icon =
-                        if (expandedShop) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown
-                    Icon(imageVector = icon, contentDescription = null)
+                    Icon(
+                        imageVector = if (expandedSalon) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                        contentDescription = null
+                    )
                 },
-                modifier = Modifier
-                    .menuAnchor()
-                    .fillMaxWidth(),
-                readOnly = true
+                modifier = Modifier.menuAnchor().fillMaxWidth()
             )
             ExposedDropdownMenu(
-                expanded = expandedShop,
-                onDismissRequest = { expandedShop = false }
+                expanded = expandedSalon,
+                onDismissRequest = { expandedSalon = false }
             ) {
-                shopList.forEach { shop ->
+                salonList.forEach { salon ->
                     DropdownMenuItem(
-                        text = { Text(shop) },
+                        text = { Text(salon.name) },
                         onClick = {
-                            selectedShop = shop
-                            expandedShop = false
+                            selectedSalon = salon
+                            selectedStylist = null
+                            expandedSalon = false
                         }
                     )
                 }
@@ -289,37 +195,78 @@ fun HairshopSelectionArea() {
 
         Spacer(modifier = Modifier.height(16.dp))
 
+        // 미용사 드롭다운
         ExposedDropdownMenuBox(
-            expanded = expandedHairdresser,
-            onExpandedChange = { expandedHairdresser = !expandedHairdresser }
+            expanded = expandedStylist,
+            onExpandedChange = { expandedStylist = !expandedStylist }
         ) {
             OutlinedTextField(
-                value = selectedHairdresser,
+                value = selectedStylist?.name ?: "미용사 선택",
                 onValueChange = {},
-                label = { Text("") },
+                readOnly = true,
                 trailingIcon = {
-                    val icon =
-                        if (expandedHairdresser) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown
-                    Icon(imageVector = icon, contentDescription = null)
+                    Icon(
+                        imageVector = if (expandedStylist) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                        contentDescription = null
+                    )
                 },
-                modifier = Modifier
-                    .menuAnchor()
-                    .fillMaxWidth(),
-                readOnly = true
+                modifier = Modifier.menuAnchor().fillMaxWidth()
             )
             ExposedDropdownMenu(
-                expanded = expandedHairdresser,
-                onDismissRequest = { expandedHairdresser = false }
+                expanded = expandedStylist,
+                onDismissRequest = { expandedStylist = false }
             ) {
-                hairdresserList.forEach { hairdresser ->
+                stylistList.forEach { stylist ->
                     DropdownMenuItem(
-                        text = { Text(hairdresser) },
+                        text = { Text(stylist.name) },
                         onClick = {
-                            selectedHairdresser = hairdresser
-                            expandedHairdresser = false
+                            selectedStylist = stylist
+                            expandedStylist = false
+                            onSelectionChanged(
+                                selectedSalon?.id ?: "",
+                                stylist.id,
+                                stylist.name
+                            )
                         }
                     )
                 }
+            }
+        }
+    }
+}
+
+
+@Composable
+fun StepProgressBar() {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp)
+            .drawBehind {
+                val strokeWidth = 2.dp.toPx()
+                val centerY = size.height / 2
+                val startX = 24.dp.toPx()
+                val endX = size.width - 24.dp.toPx()
+                drawLine(Color.Gray, Offset(startX, centerY), Offset(endX, centerY), strokeWidth)
+            },
+        horizontalArrangement = Arrangement.SpaceEvenly
+    ) {
+        listOf(R.drawable.first, R.drawable.second, R.drawable.choicethird, R.drawable.fourth, R.drawable.fifth).forEachIndexed { index, icon ->
+            val borderColor = if (index == 2) Color.Black else Color.Transparent
+            Box(
+                modifier = Modifier
+                    .size(48.dp)
+                    .clip(CircleShape)
+                    .background(Color(0xFFF4F4F4))
+                    .border(1.dp, borderColor, CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                Image(
+                    painter = painterResource(id = icon),
+                    contentDescription = "Step $index",
+                    modifier = Modifier.size(20.dp),
+                    contentScale = ContentScale.Crop
+                )
             }
         }
     }

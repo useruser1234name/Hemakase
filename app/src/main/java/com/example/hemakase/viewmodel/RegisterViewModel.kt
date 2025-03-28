@@ -59,7 +59,10 @@ class RegisterViewModel : ViewModel() {
         profileUri: Uri? = null,
         salonName: String? = null,
         salonAddress: String? = null,
-        selectedSalonId: String? = null
+        selectedSalonId: String? = null,
+        selectedStylistId: String,
+        selectedStylistName: String
+
     ) {
         viewModelScope.launch {
             try {
@@ -112,7 +115,8 @@ class RegisterViewModel : ViewModel() {
                         phone = phone,
                         photo = photoUrl,
                         salonId = salonId,
-                        address = address
+                        address = address,
+                        stylistName = name
                     )
 
                     db.collection("users").document(uid).set(user).await()
@@ -126,7 +130,9 @@ class RegisterViewModel : ViewModel() {
                         phone = phone,
                         photo = photoUrl,
                         salonId = selectedSalonId, // 고객은 선택 필수
-                        address = address
+                        address = address,
+                        stylistId = selectedStylistId,
+                        stylistName = selectedStylistName
                     )
 
                     db.collection("users").document(uid).set(user).await()

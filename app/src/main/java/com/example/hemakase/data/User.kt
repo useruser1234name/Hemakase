@@ -11,5 +11,7 @@ data class User(
     val phone: String = "",
     val address: String = "",
     val salonId: String? = null, // 추가된 부분
-    val createdAt: Long = System.currentTimeMillis()
+    val createdAt: Long = System.currentTimeMillis(),
+    val stylistId: String? = null,
+    val stylistName: String? = null
 )

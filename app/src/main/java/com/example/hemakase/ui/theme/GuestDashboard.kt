@@ -28,13 +28,17 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.platform.LocalContext
 import java.util.Locale
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.hemakase.viewmodel.RegisterViewModel
+import com.google.firebase.Timestamp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
+import java.util.Calendar
 
 @Preview(showBackground = true)
 @Composable
@@ -146,7 +150,7 @@ fun DashboardScreen(registerViewModel: RegisterViewModel = viewModel()) {
                 val userDoc = db.collection("users").document(uid).get().await()
                 val userData = userDoc.data
                 salonId = userData?.get("salonId") as? String
-                stylistName = userData?.get("name") as? String ?: ""
+                stylistName = userData?.get("stylistName") as? String ?: ""
                 customerName = userData?.get("name") as? String ?: ""
                 customerPhoto = userData?.get("photo") as? String
 
@@ -203,6 +207,45 @@ fun DashboardScreen(registerViewModel: RegisterViewModel = viewModel()) {
                 onYearChange = { selectedYear = it }
             )
 
+            val reservedTimeSlots = remember { mutableStateListOf<String>() }
+            val selectedDayVal = selectedDay
+
+            LaunchedEffect(selectedDay, selectedMonth, selectedYear, salonId, stylistName) {
+                val selectedDayVal = selectedDay
+
+                if (selectedDayVal != null && salonId != null && stylistName.isNotEmpty()) {
+                    val calendar = Calendar.getInstance().apply {
+                        set(Calendar.YEAR, selectedYear)
+                        set(Calendar.MONTH, selectedMonth - 1)
+                        set(Calendar.DAY_OF_MONTH, selectedDayVal)
+                        set(Calendar.HOUR_OF_DAY, 0)
+                        set(Calendar.MINUTE, 0)
+                        set(Calendar.SECOND, 0)
+                    }
+
+                    val startOfDay = Timestamp(calendar.time)
+                    calendar.add(Calendar.DATE, 1)
+                    val endOfDay = Timestamp(calendar.time)
+
+                    val snapshot = FirebaseFirestore.getInstance()
+                        .collection("reservations")
+                        .whereEqualTo("salonId", salonId)
+                        .whereEqualTo("stylist_id", stylistName)
+                        .whereGreaterThanOrEqualTo("date", startOfDay)
+                        .whereLessThan("date", endOfDay)
+                        .whereEqualTo("status", "confirmed")
+                        .get()
+                        .await()
+
+                    val formatter = SimpleDateFormat("HH:mm", Locale.KOREAN)
+                    reservedTimeSlots.clear()
+                    reservedTimeSlots.addAll(snapshot.documents.mapNotNull {
+                        it.getTimestamp("date")?.toDate()?.let { d -> formatter.format(d) }
+                    })
+                }
+
+            }
+
             if (showBookingUI && selectedDay != null) {
                 val timeSlots = listOf(
                     "10:00", "11:00", "12:00", "13:00", "14:00",
@@ -232,19 +275,24 @@ fun DashboardScreen(registerViewModel: RegisterViewModel = viewModel()) {
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         timeSlots.forEach { time ->
+                            val isReserved = reservedTimeSlots.contains(time)
+
                             OutlinedButton(
-                                onClick = { selectedTime = time },
+                                onClick = { if (!isReserved) selectedTime = time },
+                                enabled = !isReserved,
                                 colors = ButtonDefaults.outlinedButtonColors(
                                     containerColor = if (selectedTime == time) Color.Black else Color.White,
                                     contentColor = if (selectedTime == time) Color.White else Color.Black
                                 ),
                                 shape = RoundedCornerShape(50),
-                                border = BorderStroke(1.dp, Color.Black)
+                                border = BorderStroke(1.dp, Color.Black),
+                                modifier = if (isReserved) Modifier.alpha(0.3f) else Modifier
                             ) {
                                 Text(time)
                             }
                         }
                     }
+
 
                     Spacer(modifier = Modifier.height(16.dp))
 
@@ -260,6 +308,9 @@ fun DashboardScreen(registerViewModel: RegisterViewModel = viewModel()) {
             }
 
             if (showDialog) {
+
+                val coroutineScope = rememberCoroutineScope()
+
                 AlertDialog(
                     onDismissRequest = { showDialog = false },
                     title = {
@@ -284,59 +335,52 @@ fun DashboardScreen(registerViewModel: RegisterViewModel = viewModel()) {
                     confirmButton = {
                         TextButton(
                             onClick = {
-                                val uid = auth.currentUser?.uid ?: return@TextButton
+                                coroutineScope.launch {
+                                    val uid = auth.currentUser?.uid ?: return@launch
 
-                                try {
-                                    // 예약 시간 문자열: 예 "2025-03-29 15:00"
-                                    val reservationTime =
-                                        "$selectedYear-${"%02d".format(selectedMonth)}-${
-                                            "%02d".format(selectedDay)
-                                        } $selectedTime"
+                                    try {
+                                        val reservationTime = "$selectedYear-${"%02d".format(selectedMonth)}-${"%02d".format(selectedDay)} $selectedTime"
+                                        val formatter = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.KOREAN)
+                                        val parsedDate = formatter.parse(reservationTime)
+                                        val timestamp = Timestamp(parsedDate!!)
 
-                                    // 문자열 → Date → Timestamp 변환
-                                    val formatter = java.text.SimpleDateFormat(
-                                        "yyyy-MM-dd HH:mm",
-                                        java.util.Locale.KOREAN
-                                    )
-                                    val parsedDate = formatter.parse(reservationTime)
-                                    val timestamp = com.google.firebase.Timestamp(parsedDate!!)
+                                        val userDoc = db.collection("users").document(uid).get().await()
+                                        val stylistId = userDoc.getString("stylistId")
 
-                                    // 예약 정보 맵 생성
-                                    val reservation = hashMapOf(
-                                        "customer_id" to uid,
-                                        "customer_name" to customerName,
-                                        "customer_photo" to customerPhoto,
-                                        "stylist_id" to uid, // 추후 stylist 선택 가능
-                                        "date" to timestamp, // Timestamp 타입으로 저장
-                                        "status" to "pending",
-                                        "style" to "",
-                                        "note" to "",
-                                        "reference_photo" to null,
-                                        "salonId" to salonId
-                                    )
+                                        val reservation = hashMapOf(
+                                            "customer_id" to uid,
+                                            "customer_name" to customerName,
+                                            "customer_photo" to customerPhoto,
+                                            "stylist_id" to stylistId,
+                                            "date" to timestamp,
+                                            "status" to "pending",
+                                            "style" to "",
+                                            "note" to "",
+                                            "reference_photo" to null,
+                                            "salonId" to salonId
+                                        )
 
-                                    // Firestore 저장
-                                    db.collection("reservations")
-                                        .add(reservation)
-                                        .addOnSuccessListener {
-                                            Log.d("Firestore", "예약 저장 성공")
-                                        }
-                                        .addOnFailureListener { e ->
-                                            Log.e("Firestore", "예약 저장 실패: ${e.message}")
-                                        }
+                                        db.collection("reservations")
+                                            .add(reservation)
+                                            .addOnSuccessListener {
+                                                Log.d("Firestore", "예약 저장 성공")
+                                            }
+                                            .addOnFailureListener { e ->
+                                                Log.e("Firestore", "예약 저장 실패: ${e.message}")
+                                            }
 
-                                    showDialog = false
+                                        showDialog = false
 
-                                } catch (e: Exception) {
-                                    Log.e("예약 오류", "날짜 파싱 오류: ${e.message}")
+                                    } catch (e: Exception) {
+                                        Log.e("예약 오류", "날짜 파싱 오류: ${e.message}")
+                                    }
                                 }
                             }
-
                         ) {
                             Text("확정", color = Color.Black)
                         }
-
-                    },
+                    }
+                    ,
                     dismissButton = {
                         TextButton(onClick = { showDialog = false }) {
                             Text("취소", color = Color.Gray)
@@ -608,8 +652,6 @@ fun CustomCalendarUI(
 
     val calendarCells = leadingBlanks + dayCells + trailingBlanks
     val weeks = calendarCells.chunked(7)
-
-    val selectedDayVal = selectedDay
 
     Column(
         modifier = Modifier
