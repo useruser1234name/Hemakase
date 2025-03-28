@@ -28,6 +28,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -43,29 +44,30 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.sp
 import com.example.hemakase.R
 import com.example.hemakase.navigator.DashboardBottomBar
+import com.example.hemakase.navigator.StylistBottomBar
+import com.google.firebase.firestore.FirebaseFirestore
+import kotlinx.coroutines.tasks.await
 
 data class ServiceItem(
     val name: String,
     val price: String
 )
 
-//@Preview(showBackground = true)
+//@Preview(showBackground = true, name = "Clients Tab Preview")
 //@Composable
-//fun BarberSettingsScreenPreview() {
-//    BarberSettingsScreen()
+//fun BarberSettingsScreenClientsTabPreview() {
+//    // 강제로 Clients 탭을 선택한 Preview용
+//    BarberSettingsScreenClientsTab()
 //}
-
-@Preview(showBackground = true, name = "Clients Tab Preview")
-@Composable
-fun BarberSettingsScreenClientsTabPreview() {
-    // 강제로 Clients 탭을 선택한 Preview용
-    BarberSettingsScreenClientsTab()
-}
 
 // Clients 탭을 고정한 컴포저블 (Preview 전용)
 @Composable
-fun BarberSettingsScreenClientsTab() {
-    var selectedTab by remember { mutableStateOf(1) } // 0=Barber, 1=Clients
+fun BarberSettingsScreenClientsTab(
+//    selectedTab: Int,
+//    onTabSelected: (Int) -> Unit
+) {
+
+    var selectedInternalTab by remember { mutableStateOf(0) }
 
     // 샘플 서비스 리스트
     val serviceList = listOf(
@@ -76,8 +78,11 @@ fun BarberSettingsScreenClientsTab() {
 
     Scaffold(
         containerColor = Color.White,
-        topBar = { SettingTopBar() },
-        bottomBar = { DashboardBottomBar() }
+//        topBar = { SettingTopBar() },
+//        bottomBar = { StylistBottomBar(
+//            selectedTab = selectedTab,
+//            onTabSelected = onTabSelected
+//        ) }
     ) { innerPadding ->
         Column(
             modifier = Modifier
@@ -93,30 +98,26 @@ fun BarberSettingsScreenClientsTab() {
 
             // (2) 탭 (Barber / Clients), 하지만 selectedTab=1로 고정
             Spacer(modifier = Modifier.height(16.dp))
+
             TabRow(
-                selectedTabIndex = selectedTab,
+                selectedTabIndex = selectedInternalTab,
                 containerColor = Color.White
             ) {
                 Tab(
-                    selected = (selectedTab == 0),
-                    onClick = { /*no-op*/ }, // Preview용이므로 클릭 시 동작 없음
+                    selected = selectedInternalTab == 0,
+                    onClick = { selectedInternalTab = 0 },
                     text = { Text("Barber") }
                 )
                 Tab(
-                    selected = (selectedTab == 1),
-                    onClick = { /*no-op*/ },
+                    selected = selectedInternalTab == 1,
+                    onClick = { selectedInternalTab = 1 },
                     text = { Text("Clients") }
                 )
             }
 
-            // (3) 탭별 컨텐츠
-            when (selectedTab) {
-                0 -> {
-                    BarberTabContent(serviceList)
-                }
-                1 -> {
-                    ClientsTabContent() // 실제 Clients 탭 UI
-                }
+            when (selectedInternalTab) {
+                0 -> BarberTabContent(serviceList)
+                1 -> ClientsTabContent()
             }
         }
     }
@@ -207,6 +208,10 @@ fun BarberTabContent(serviceList: List<ServiceItem>) {
     Spacer(modifier = Modifier.height(16.dp))
 
     Column {
+
+        ReservationApprovalList()
+        Spacer(modifier = Modifier.height(24.dp))
+
         // 1) Time
         var timeText by remember { mutableStateOf("8 AM - 9 PM") }
         OutlinedTextField(
@@ -293,6 +298,95 @@ fun BarberTabContent(serviceList: List<ServiceItem>) {
                     Divider(color = Color.LightGray, thickness = 1.dp)
                 }
             }
+        }
+    }
+}
+
+
+@Composable
+fun ReservationApprovalList() {
+    val db = FirebaseFirestore.getInstance()
+    var reservations by remember { mutableStateOf<List<Map<String, Any>>>(emptyList()) }
+
+    // 테스트용 오너 계정 UID 가져오기
+    val ownerEmail = "sandpingping2@gmail.com"
+    var ownerId by remember { mutableStateOf<String?>(null) }
+
+    // Firestore에서 예약 로딩
+    LaunchedEffect(Unit) {
+        // 오너 UID 가져오기
+        val userSnapshot = db.collection("users")
+            .whereEqualTo("email", ownerEmail)
+            .get()
+            .await()
+        ownerId = userSnapshot.documents.firstOrNull()?.getString("id")
+
+        ownerId?.let { uid ->
+            val salonSnapshot = db.collection("salons")
+                .whereEqualTo("ownerId", uid)
+                .get()
+                .await()
+
+            val salonId = salonSnapshot.documents.firstOrNull()?.id
+
+            if (salonId != null) {
+                val resSnapshot = db.collection("reservations")
+                    .whereEqualTo("salonId", salonId)
+                    .whereEqualTo("status", "pending")
+                    .get()
+                    .await()
+
+                reservations = resSnapshot.documents.map { it.data!! + ("docId" to it.id) }
+            }
+        }
+    }
+
+    Column {
+        Text("예약 승인 요청", fontSize = 16.sp, fontWeight = FontWeight.Bold)
+        Spacer(modifier = Modifier.height(12.dp))
+
+        reservations.forEach { reservation ->
+            val customerName = reservation["customer_name"] as? String ?: "이름 없음"
+            val time = (reservation["date"] as? com.google.firebase.Timestamp)?.toDate()?.toString()
+            val docId = reservation["docId"] as String
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 8.dp),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column {
+                    Text("고객: $customerName")
+                    Text("시간: $time")
+                }
+
+                Row {
+                    Text(
+                        "수락",
+                        modifier = Modifier
+                            .clickable {
+                                db.collection("reservations")
+                                    .document(docId)
+                                    .update("status", "confirmed")
+                            }
+                            .padding(horizontal = 8.dp),
+                        color = Color.Green
+                    )
+                    Text(
+                        "거절",
+                        modifier = Modifier
+                            .clickable {
+                                db.collection("reservations")
+                                    .document(docId)
+                                    .update("status", "rejected")
+                            }
+                            .padding(horizontal = 8.dp),
+                        color = Color.Red
+                    )
+                }
+            }
+            Divider()
         }
     }
 }

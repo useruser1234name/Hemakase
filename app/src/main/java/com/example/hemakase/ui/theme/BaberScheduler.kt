@@ -16,8 +16,19 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.*
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.*
 import com.example.hemakase.navigator.DashboardBottomBar
+import com.example.hemakase.navigator.StylistBottomBar
+import com.google.firebase.Timestamp
+import com.google.firebase.firestore.ktx.firestore
+import com.google.firebase.ktx.Firebase
+import java.text.SimpleDateFormat
+import java.time.LocalDate
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+import java.util.Date
+import java.util.Locale
 
 
 data class Appointment(
@@ -29,46 +40,32 @@ data class Appointment(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun BaberSchedulerScreen() {
+fun BaberSchedulerScreen(
+    selectedTab: Int,
+    onTabSelected: (Int) -> Unit
+) {
+    var selectedDate by remember { mutableStateOf(LocalDate.now()) }
+    var appointments by remember { mutableStateOf<List<Appointment>>(emptyList()) }
+
+    val dateFormatter = DateTimeFormatter.ofPattern("yyyy.MM.dd (E)")
+    val formattedDate = selectedDate.format(dateFormatter)
+
+    LaunchedEffect(selectedDate) {
+        getAppointmentsByDate(selectedDate) {
+            appointments = it
+        }
+    }
+
     Scaffold(
         containerColor = Color.White,
-        topBar = { DashboardTopBar() },
-        bottomBar = { DashboardBottomBar() },
-        floatingActionButton = {
-            FloatingActionButton(
-                onClick = { /*TODO: 새 예약 추가 등*/ },
-                shape = CircleShape,
-                containerColor = Color.Black,
-                contentColor = Color.White,
-                elevation = FloatingActionButtonDefaults.elevation(
-                    defaultElevation = 0.dp,
-                    pressedElevation = 0.dp,
-                    focusedElevation = 0.dp,
-                    hoveredElevation = 0.dp
-                )
-            ) {
-                Icon(imageVector = Icons.Default.Add, contentDescription = "Add")
-            }
-        },
-        floatingActionButtonPosition = FabPosition.End,
+//        topBar = { DashboardTopBar() },
+//        bottomBar = { StylistBottomBar(
+//            selectedTab = selectedTab,
+//            onTabSelected = onTabSelected
+//        ) },
+
     ) { innerPadding ->
         // 샘플 데이터
-        val appointments = listOf(
-            Appointment("10 AM", "Osman Semedo", "Haircut & Beard", "6:25 PM - 7 PM with Arya"),
-            Appointment(
-                "11 AM",
-                "Jamal Sane",
-                "Haircut & Beard (VIP)",
-                "7:15 PM - 8:15 PM with Agolsh"
-            ),
-            Appointment("1 PM", "Sam", "Haircut & Beard", "12 AM - 1 PM with Agolsh"),
-            Appointment("2 PM", "John Doe", "Haircut & Beard", "1 PM - 1:45 PM with Arya"),
-            Appointment("3 PM", "El King", "Haircut & Beard", "2 PM - 3 PM with Agolsh"),
-            Appointment("4 PM", "Omron Samad", "Haircut (VIP)", "3:20 PM - 4 PM with Arya"),
-            Appointment("5 PM", "Arya", "Haircut & Beard (VIP)", "4:15 PM - 4:55 PM with Agolsh"),
-            Appointment("6 PM", "Joseph De", "Haircut & Beard", "5:20 PM - 6:20 PM with Agolsh"),
-        )
-
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -76,10 +73,28 @@ fun BaberSchedulerScreen() {
                 .padding(innerPadding)
                 .padding(horizontal = 20.dp, vertical = 8.dp)
         ) {
-            // (1) Next Client 섹션
-//            NextClientsection()
 
-            Spacer(modifier = Modifier.height(24.dp))
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 16.dp),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton(onClick = { selectedDate = selectedDate.minusDays(1) }) {
+                    Text(text = "←")
+                }
+                Text(
+                    text = formattedDate,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+                IconButton(onClick = { selectedDate = selectedDate.plusDays(1) }) {
+                    Text(text = "→")
+                }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
 
             // (2) 큰 박스 안에 모든 예약 표시 + 항목 사이 Divider
             Box(
@@ -103,15 +118,6 @@ fun BaberSchedulerScreen() {
                         }
                     }
                 }
-            }
-
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 20.dp),
-                horizontalArrangement = Arrangement.End
-            ) {
-                Text("● Current date    ○ My client")
             }
         }
     }
@@ -161,3 +167,43 @@ fun AgendaItem(appointment: Appointment) {
 //fun DashboardScreenPreview() {
 //    BaberSchedulerScreen()
 //}
+
+fun getAppointmentsByDate(
+    selectedDate: LocalDate,
+    onResult: (List<Appointment>) -> Unit
+) {
+    val db = Firebase.firestore
+
+    val startOfDay = selectedDate.atStartOfDay(ZoneId.systemDefault()).toInstant()
+    val endOfDay = selectedDate.plusDays(1).atStartOfDay(ZoneId.systemDefault()).toInstant()
+
+    db.collection("reservations")
+        .whereGreaterThanOrEqualTo("date", Timestamp(startOfDay.epochSecond, 0))
+        .whereLessThan("date", Timestamp(endOfDay.epochSecond, 0))
+        .get()
+        .addOnSuccessListener { result ->
+            val appointments = result.documents.mapNotNull { doc ->
+                val customerName = doc.getString("customer_name") ?: return@mapNotNull null
+                val stylist = doc.getString("stylist_id") ?: "Unknown"
+                val date = doc.getTimestamp("date")?.toDate() ?: return@mapNotNull null
+
+                // 시간 정보 구성
+                val timeLabel = SimpleDateFormat("h a", Locale.getDefault()).format(date)
+                val timeRange = SimpleDateFormat("h:mm a", Locale.getDefault()).format(date) +
+                        " - " + SimpleDateFormat("h:mm a", Locale.getDefault())
+                    .format(Date(date.time + 30 * 60 * 1000)) + " with $stylist"
+
+                Appointment(
+                    timeLabel = timeLabel,
+                    clientName = customerName,
+                    serviceInfo = "Haircut & Beard",
+                    timeRange = timeRange
+                )
+            }
+
+            onResult(appointments)
+        }
+        .addOnFailureListener {
+            onResult(emptyList())
+        }
+}
