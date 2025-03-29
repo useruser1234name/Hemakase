@@ -110,8 +110,14 @@ class MainActivity : ComponentActivity() {
                                 launcher.launch(signInIntent)
                             },
                             onRegisterClick = {
-                                viewModel.triggerRegisterFlow()
-                                currentScreen = Screen.Personal
+                                viewModel.setRegisterMode(true) // ✅ 회원가입 모드 활성화
+                                val gso = GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
+                                    .requestIdToken("1090328758097-nnsn94rh91ao7aiaan4peom1aagivqoe.apps.googleusercontent.com")
+                                    .requestEmail()
+                                    .build()
+                                val signInClient = GoogleSignIn.getClient(activity, gso)
+                                val signInIntent = signInClient.signInIntent
+                                launcher.launch(signInIntent)
                             }
                         )
                     }

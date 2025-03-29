@@ -39,6 +39,7 @@ import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import java.util.Calendar
+import java.util.TimeZone
 
 @Preview(showBackground = true)
 @Composable
@@ -68,12 +69,13 @@ fun DashboardScreen(registerViewModel: RegisterViewModel = viewModel()) {
     var rescheduleDate by remember { mutableStateOf<java.util.Calendar?>(null) }
     var isRescheduling by remember { mutableStateOf(false) }
 
-    val formattedReservedDate =
-        if (reservedYear != null && reservedMonth != null && reservedDay != null) {
-            formatReservationDate(reservedYear!!, reservedMonth!!, reservedDay!!)
-        } else {
-            "예약 없음"
+    val formattedReservedDate = reservedYear?.let { y ->
+        reservedMonth?.let { m ->
+            reservedDay?.let { d ->
+                formatReservationDate(y, m, d)
+            }
         }
+    } ?: "예약 없음"
 
 
     val scrollState = rememberScrollState()
@@ -208,9 +210,10 @@ fun DashboardScreen(registerViewModel: RegisterViewModel = viewModel()) {
             )
 
             val reservedTimeSlots = remember { mutableStateListOf<String>() }
-            val selectedDayVal = selectedDay
+            val isReservedLoaded = remember { mutableStateOf(false) }
 
             LaunchedEffect(selectedDay, selectedMonth, selectedYear, salonId, stylistName) {
+                isReservedLoaded.value = false
                 val selectedDayVal = selectedDay
 
                 if (selectedDayVal != null && salonId != null && stylistName.isNotEmpty()) {
@@ -238,12 +241,17 @@ fun DashboardScreen(registerViewModel: RegisterViewModel = viewModel()) {
                         .await()
 
                     val formatter = SimpleDateFormat("HH:mm", Locale.KOREAN)
+                    formatter.timeZone = TimeZone.getTimeZone("Asia/Seoul")
+
                     reservedTimeSlots.clear()
                     reservedTimeSlots.addAll(snapshot.documents.mapNotNull {
-                        it.getTimestamp("date")?.toDate()?.let { d -> formatter.format(d) }
+                        it.getTimestamp("date")?.toDate()?.let { d ->
+                            formatter.format(d).trim()
+                        }
                     })
-                }
 
+                    isReservedLoaded.value = true // 로딩 완료
+                }
             }
 
             if (showBookingUI && selectedDay != null) {
@@ -275,7 +283,11 @@ fun DashboardScreen(registerViewModel: RegisterViewModel = viewModel()) {
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         timeSlots.forEach { time ->
-                            val isReserved = reservedTimeSlots.contains(time)
+                            val isReserved = if (isReservedLoaded.value) {
+                                reservedTimeSlots.any { it.trim() == time }
+                            } else {
+                                false
+                            }
 
                             OutlinedButton(
                                 onClick = { if (!isReserved) selectedTime = time },
@@ -288,10 +300,15 @@ fun DashboardScreen(registerViewModel: RegisterViewModel = viewModel()) {
                                 border = BorderStroke(1.dp, Color.Black),
                                 modifier = if (isReserved) Modifier.alpha(0.3f) else Modifier
                             ) {
-                                Text(time)
+                                Text(
+                                    time,
+                                    color = if (isReserved) Color.Gray else Color.Black,
+                                    fontWeight = if (isReserved) FontWeight.Normal else FontWeight.SemiBold
+                                )
                             }
                         }
                     }
+
 
 
                     Spacer(modifier = Modifier.height(16.dp))
@@ -342,10 +359,31 @@ fun DashboardScreen(registerViewModel: RegisterViewModel = viewModel()) {
                                         val reservationTime = "$selectedYear-${"%02d".format(selectedMonth)}-${"%02d".format(selectedDay)} $selectedTime"
                                         val formatter = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.KOREAN)
                                         val parsedDate = formatter.parse(reservationTime)
-                                        val timestamp = Timestamp(parsedDate!!)
+                                        val calendar = Calendar.getInstance().apply {
+                                            time = parsedDate!!
+                                            set(Calendar.SECOND, 0)
+                                            set(Calendar.MILLISECOND, 0)
+                                        }
+                                        val timestamp = Timestamp(calendar.time)
 
                                         val userDoc = db.collection("users").document(uid).get().await()
                                         val stylistId = userDoc.getString("stylistId")
+
+                                        // 예약 중복 여부 체크
+                                        val existing = db.collection("reservations")
+                                            .whereEqualTo("salonId", salonId)
+                                            .whereEqualTo("stylist_id", stylistId)
+                                            .whereEqualTo("date", timestamp)
+                                            .whereEqualTo("status", "confirmed")
+                                            .get()
+                                            .await()
+                                        // [2] 이미 예약된 시간
+                                        if (!existing.isEmpty) {
+                                            Log.w("예약", "이미 예약된 시간입니다.")
+                                            showDialog = false
+                                            // → 토스트나 에러 처리 추가도 가능
+                                            return@launch
+                                        }
 
                                         val reservation = hashMapOf(
                                             "customer_id" to uid,
@@ -421,7 +459,7 @@ fun DashboardScreen(registerViewModel: RegisterViewModel = viewModel()) {
                         set(java.util.Calendar.MINUTE, minute)
                     }
 
-                    // 🔁 Firebase 예약 업데이트
+                    // Firebase 예약 업데이트
                     val uid = auth.currentUser?.uid ?: return@TimePickerDialog
                     val newTimestamp = com.google.firebase.Timestamp(rescheduleDate!!.time)
 
@@ -839,6 +877,7 @@ fun MonthDropdown(
     }
 }
 
+@Composable
 fun formatReservationDate(year: Int, month: Int, day: Int): String {
     val calendar = java.util.Calendar.getInstance()
     calendar.set(year, month - 1, day) // Calendar는 0부터 시작해서 month-1

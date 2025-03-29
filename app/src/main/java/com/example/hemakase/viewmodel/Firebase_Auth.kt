@@ -30,6 +30,14 @@ class LoginViewModel : ViewModel() {
     private val _needToRegister = MutableStateFlow(false)
     val needToRegister: StateFlow<Boolean> = _needToRegister
 
+    private val _registerMode = MutableStateFlow(false)
+    val registerMode: StateFlow<Boolean> = _registerMode
+
+    fun setRegisterMode(enabled: Boolean) {
+        _registerMode.value = enabled
+    }
+
+
     fun triggerRegisterFlow() {
         _needToRegister.value = true
     }
@@ -70,9 +78,14 @@ class LoginViewModel : ViewModel() {
                     val uid = it.uid
                     val doc = firestore.collection("users").document(uid).get().await()
                     if (doc.exists()) {
-                        _loginState.value = true // 로그인 성공
+                        _loginState.value = true // 기존 유저 → 로그인 처리
                     } else {
-                        _needToRegister.value = true // 회원가입 필요
+                        if (_registerMode.value) {
+                            _needToRegister.value = true // 회원가입 플로우로 이동
+                            _registerMode.value = false // 초기화
+                        } else {
+                            _errorMessage.value = "회원 정보가 없습니다. 회원가입 버튼을 눌러주세요."
+                        }
                     }
                 }
 
