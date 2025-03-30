@@ -1,5 +1,7 @@
 package com.example.hemakase.ui.theme
 
+import android.util.Log
+import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -14,14 +16,18 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.Divider
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.ScrollableTabRow
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
@@ -29,6 +35,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -38,6 +45,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
@@ -45,12 +53,15 @@ import androidx.compose.ui.unit.sp
 import com.example.hemakase.R
 import com.example.hemakase.navigator.DashboardBottomBar
 import com.example.hemakase.navigator.StylistBottomBar
+import com.example.hemakase.viewmodel.ReservationApprovalViewModel
+import com.google.firebase.Timestamp
 import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.tasks.await
+import androidx.lifecycle.viewmodel.compose.viewModel
 
 data class ServiceItem(
     val name: String,
-    val price: String
+    val price: String,
 )
 
 //@Preview(showBackground = true, name = "Clients Tab Preview")
@@ -99,9 +110,10 @@ fun BarberSettingsScreenClientsTab(
             // (2) 탭 (Barber / Clients), 하지만 selectedTab=1로 고정
             Spacer(modifier = Modifier.height(16.dp))
 
-            TabRow(
+            ScrollableTabRow(
                 selectedTabIndex = selectedInternalTab,
-                containerColor = Color.White
+                containerColor = Color.White,
+                modifier = Modifier.fillMaxWidth()
             ) {
                 Tab(
                     selected = selectedInternalTab == 0,
@@ -205,11 +217,18 @@ fun ServiceRow(item: ServiceItem) {
 
 @Composable
 fun BarberTabContent(serviceList: List<ServiceItem>) {
-    Spacer(modifier = Modifier.height(16.dp))
+    val scrollState = rememberScrollState()
 
-    Column {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(scrollState)
+    ) {
+
+        Spacer(modifier = Modifier.height(16.dp))
 
         ReservationApprovalList()
+
         Spacer(modifier = Modifier.height(24.dp))
 
         // 1) Time
@@ -304,41 +323,14 @@ fun BarberTabContent(serviceList: List<ServiceItem>) {
 
 
 @Composable
-fun ReservationApprovalList() {
-    val db = FirebaseFirestore.getInstance()
-    var reservations by remember { mutableStateOf<List<Map<String, Any>>>(emptyList()) }
+fun ReservationApprovalList(viewModel: ReservationApprovalViewModel = viewModel()) {
+    val context = LocalContext.current
+    val reservations by viewModel.pendingReservations.collectAsState()
+    var selectedReservation by remember { mutableStateOf<Map<String, Any>?>(null) }
+    var showDialog by remember { mutableStateOf(false) }
 
-    // 테스트용 오너 계정 UID 가져오기
-    val ownerEmail = "sandpingping2@gmail.com"
-    var ownerId by remember { mutableStateOf<String?>(null) }
-
-    // Firestore에서 예약 로딩
     LaunchedEffect(Unit) {
-        // 오너 UID 가져오기
-        val userSnapshot = db.collection("users")
-            .whereEqualTo("email", ownerEmail)
-            .get()
-            .await()
-        ownerId = userSnapshot.documents.firstOrNull()?.getString("id")
-
-        ownerId?.let { uid ->
-            val salonSnapshot = db.collection("salons")
-                .whereEqualTo("ownerId", uid)
-                .get()
-                .await()
-
-            val salonId = salonSnapshot.documents.firstOrNull()?.id
-
-            if (salonId != null) {
-                val resSnapshot = db.collection("reservations")
-                    .whereEqualTo("salonId", salonId)
-                    .whereEqualTo("status", "pending")
-                    .get()
-                    .await()
-
-                reservations = resSnapshot.documents.map { it.data!! + ("docId" to it.id) }
-            }
-        }
+        viewModel.loadPendingReservations("sandpingping2@gmail.com")
     }
 
     Column {
@@ -347,12 +339,15 @@ fun ReservationApprovalList() {
 
         reservations.forEach { reservation ->
             val customerName = reservation["customer_name"] as? String ?: "이름 없음"
-            val time = (reservation["date"] as? com.google.firebase.Timestamp)?.toDate()?.toString()
-            val docId = reservation["docId"] as String
+            val time = (reservation["date"] as? Timestamp)?.toDate()?.toString()
 
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .clickable {
+                        selectedReservation = reservation
+                        showDialog = true
+                    }
                     .padding(vertical = 8.dp),
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
@@ -360,33 +355,46 @@ fun ReservationApprovalList() {
                     Text("고객: $customerName")
                     Text("시간: $time")
                 }
-
-                Row {
-                    Text(
-                        "수락",
-                        modifier = Modifier
-                            .clickable {
-                                db.collection("reservations")
-                                    .document(docId)
-                                    .update("status", "confirmed")
-                            }
-                            .padding(horizontal = 8.dp),
-                        color = Color.Green
-                    )
-                    Text(
-                        "거절",
-                        modifier = Modifier
-                            .clickable {
-                                db.collection("reservations")
-                                    .document(docId)
-                                    .update("status", "rejected")
-                            }
-                            .padding(horizontal = 8.dp),
-                        color = Color.Red
-                    )
-                }
             }
             Divider()
         }
+    }
+
+    if (showDialog && selectedReservation != null) {
+        val reservation = selectedReservation!!
+        val customerName = reservation["customer_name"] as? String ?: "고객"
+        val style = reservation["style"] as? String ?: "스타일 정보 없음"
+        val note = reservation["note"] as? String ?: ""
+        val time = (reservation["date"] as? Timestamp)?.toDate()?.toString() ?: "시간 미정"
+
+        AlertDialog(
+            onDismissRequest = { showDialog = false },
+            title = { Text("예약 상세 정보") },
+            text = {
+                Column {
+                    Text("고객 이름: $customerName")
+                    Text("요청 시간: $time")
+                    Text("시술: $style")
+                    if (note.isNotBlank()) Text("메모: $note")
+                }
+            },
+            confirmButton = {
+                Text("수락", color = Color.Green, modifier = Modifier.clickable {
+                    Log.d("DialogClick", "수락 버튼 클릭됨") // 여기에 로그 추가
+                    viewModel.approveReservation(reservation) {
+                        Log.d("DialogClick", "예약 수락 성공 콜백 도착")
+                        Toast.makeText(context, "예약이 수락되었습니다", Toast.LENGTH_SHORT).show()
+                        showDialog = false
+                    }
+                })
+            }
+,
+            dismissButton = {
+                Text("거절", color = Color.Red, modifier = Modifier.clickable {
+                    viewModel.rejectReservation(reservation)
+                    showDialog = false
+                })
+            }
+        )
     }
 }

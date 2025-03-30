@@ -8,6 +8,15 @@ import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.firestore
 import kotlinx.coroutines.tasks.await
+import okhttp3.Call
+import okhttp3.Callback
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
+import okhttp3.Response
+import org.json.JSONObject
+import java.io.IOException
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
@@ -97,6 +106,56 @@ object FirebaseRepository {
         return snapshot.documents.mapNotNull {
             it.getTimestamp("date")?.toDate()?.let { d -> formatter.format(d).trim() }
         }
+    }
+
+
+    fun sendMessage(message: ChatMessage) {
+        FirebaseFirestore.getInstance()
+            .collection("messages")
+            .document(message.receiverId)
+            .collection("chats")
+            .add(message)
+            .addOnSuccessListener {
+                Log.d("FirebaseRepo", "안 메시지 전송 성공")
+            }
+            .addOnFailureListener { e ->
+                Log.e("FirebaseRepo", "안 메시지 전송 실패", e)
+            }
+    }
+
+    fun sendPushNotification(token: String, title: String, body: String) {
+        val notificationData = mapOf(
+            "to" to token,
+            "notification" to mapOf(
+                "title" to title,
+                "body" to body
+            )
+        )
+
+        val client = OkHttpClient()
+        val mediaType = "application/json; charset=utf-8".toMediaType()
+        val requestBody = JSONObject(notificationData).toString().toRequestBody(mediaType)
+
+        val request = Request.Builder()
+            .url("https://fcm.googleapis.com/fcm/send")
+            .post(requestBody)
+            .addHeader("Authorization", "key=YOUR_SERVER_KEY_HERE") // 🔑 서버키 등록 필요
+            .addHeader("Content-Type", "application/json")
+            .build()
+
+        client.newCall(request).enqueue(object : Callback {
+            override fun onFailure(call: Call, e: IOException) {
+                Log.e("FCM", "푸시 전송 실패", e)
+            }
+
+            override fun onResponse(call: Call, response: Response) {
+                if (response.isSuccessful) {
+                    Log.d("FCM", "푸시 전송 성공")
+                } else {
+                    Log.e("FCM", "푸시 응답 실패: ${response.code}")
+                }
+            }
+        })
     }
 
 

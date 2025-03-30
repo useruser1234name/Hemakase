@@ -8,13 +8,16 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Divider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -31,6 +34,9 @@ import com.example.hemakase.R
 
 @Composable
 fun ClientsTabContent() {
+
+    val scrollState = rememberScrollState()
+
     val clientList = listOf(
         Client("Dan", "New"),
         Client("John Doe", "This week"),
@@ -39,7 +45,11 @@ fun ClientsTabContent() {
         Client("Arya", "This week")
     )
 
-    Column(modifier = Modifier.fillMaxWidth()) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(scrollState) // 세로 스크롤 활성화
+    ) {
         // 상단 필터(예: "All" 드롭다운)
         Spacer(modifier = Modifier.height(20.dp))
         Row(
@@ -90,10 +100,9 @@ fun ClientsTabContent() {
 }
 
 
-
 data class Client(
     val name: String,
-    val status: String
+    val status: String,
 )
 
 
