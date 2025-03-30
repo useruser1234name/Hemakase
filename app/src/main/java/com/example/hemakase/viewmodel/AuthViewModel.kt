@@ -1,5 +1,6 @@
 package com.example.hemakase.viewmodel
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.firebase.auth.FirebaseAuth
@@ -95,10 +96,16 @@ class AuthViewModel : ViewModel() {
     // 유저 역할 조회
     suspend fun getUserRole(uid: String): String? {
         return try {
-            val doc = db.collection("users").document(uid).get().await()
+            val doc = FirebaseFirestore.getInstance()
+                .collection("users")
+                .document(uid)
+                .get()
+                .await()
             doc.getString("role")
         } catch (e: Exception) {
+            Log.e("AuthViewModel", "getUserRole 실패: ${e.message}")
             null
         }
     }
+
 }

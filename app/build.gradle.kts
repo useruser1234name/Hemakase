@@ -54,6 +54,7 @@ dependencies {
     implementation(libs.androidx.ui.tooling.preview)
     implementation(libs.androidx.material3)
     implementation ("androidx.compose.material:material-icons-extended:1.7.8")
+    implementation(libs.firebase.database.ktx)
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
@@ -78,6 +79,9 @@ dependencies {
     //카메라
     implementation ("androidx.activity:activity-compose:1.7.2")
     implementation ("io.coil-kt:coil-compose:2.3.0")
+    // build.gradle (app)
+    implementation ("com.google.firebase:firebase-appcheck-playintegrity:17.0.1")
+
 
 
 }

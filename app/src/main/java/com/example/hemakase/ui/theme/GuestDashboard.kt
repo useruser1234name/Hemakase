@@ -3,7 +3,11 @@
 package com.example.hemakase.ui.theme
 
 import android.app.DatePickerDialog
+import android.net.Uri
+import android.util.Log
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -30,7 +34,13 @@ import java.time.LocalDate
 import java.util.*
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CheckBox
+import androidx.compose.material.icons.filled.CheckBoxOutlineBlank
+import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.style.TextAlign
+import coil.compose.AsyncImage
 import com.example.hemakase.viewmodel.CustomCalendarUI
 import com.example.hemakase.viewmodel.TimeSelectDialog
 
@@ -45,14 +55,20 @@ fun DashboardScreen(viewModel: GuestDashboardViewModel = viewModel()) {
     var showCustomTimeDialog by remember { mutableStateOf(false) }
     var rescheduleCalendar by remember { mutableStateOf(Calendar.getInstance()) }
 
+    val launcher =
+        rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
+            uri?.let { viewModel.referencePhotoUri = it }
+        }
+
     LaunchedEffect(Unit) {
         viewModel.loadLatestReservation()
+        Log.d("예약", "loadLatestReservation 호출됨")
+
     }
 
     Scaffold(
         containerColor = Color.White,
         topBar = { DashboardTopBar() },
-        bottomBar = { DashboardBottomBar() },
     ) { innerPadding ->
         Column(
             modifier = Modifier
@@ -63,7 +79,7 @@ fun DashboardScreen(viewModel: GuestDashboardViewModel = viewModel()) {
                 .padding(horizontal = 20.dp, vertical = 8.dp)
         ) {
             Nextmyreservation(
-                customerName = viewModel.customerName.ifBlank { "고객 없음" },
+                customerName = viewModel.stylistName.ifBlank { "미용사 없음" },
                 salonName = viewModel.salonName.ifBlank { "미용실 없음" },
                 reservationDate = viewModel.run {
                     if (reservedYear != null && reservedMonth != null && reservedDay != null)
@@ -97,19 +113,19 @@ fun DashboardScreen(viewModel: GuestDashboardViewModel = viewModel()) {
             Spacer(modifier = Modifier.height(24.dp))
 
             val timeSlots = listOf(
-                "10:00", "11:00", "12:00", "13:00", "14:00",
-                "15:00", "16:00", "17:00", "18:00", "19:00"
+                "10:00", "10:30", "11:00", "11:30", "12:00", "12:30", "13:00",
+                "13:30", "14:00", "14:30", "15:00", "15:30", "16:00", "16:30",
+                "17:00", "17:30", "18:00", "18:30", "19:00", "19:30"
             )
-
-            val availableTimeSlots = timeSlots.filterNot { viewModel.reservedTimeSlots.contains(it) }
+            val availableTimeSlots =
+                timeSlots.filterNot { viewModel.reservedTimeSlots.contains(it) }
 
             Text(
-                text = "예약 시간 선택",
+                "예약 시간 선택",
                 fontWeight = FontWeight.SemiBold,
                 fontSize = 16.sp,
                 color = Color.Black
             )
-
             Spacer(modifier = Modifier.height(12.dp))
 
             FlowRow(
@@ -117,11 +133,11 @@ fun DashboardScreen(viewModel: GuestDashboardViewModel = viewModel()) {
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                availableTimeSlots.forEach { time ->
+                timeSlots.forEach { time ->
+                    val isReserved = viewModel.reservedTimeSlots.contains(time)
                     OutlinedButton(
-                        onClick = {
-                            viewModel.selectedTime = time
-                        },
+                        onClick = { if (!isReserved) viewModel.selectedTime = time },
+                        enabled = !isReserved,
                         colors = ButtonDefaults.outlinedButtonColors(
                             containerColor = if (viewModel.selectedTime == time) Color.Black else Color.White,
                             contentColor = if (viewModel.selectedTime == time) Color.White else Color.Black
@@ -129,32 +145,194 @@ fun DashboardScreen(viewModel: GuestDashboardViewModel = viewModel()) {
                         shape = RoundedCornerShape(50),
                         border = BorderStroke(1.dp, Color.Black),
                     ) {
-                        Text(
-                            text = time,
-                            fontWeight = FontWeight.SemiBold
-                        )
+                        Text(text = time, fontWeight = FontWeight.SemiBold)
                     }
                 }
             }
 
             Spacer(modifier = Modifier.height(16.dp))
 
+            Text("시술 선택", fontWeight = FontWeight.SemiBold)
+
+            if (viewModel.treatmentCategories.isNotEmpty()) {
+                val selectedCategory = viewModel.selectedCategory
+                val selectedIndex = viewModel.treatmentCategories.indexOf(selectedCategory)
+
+                ScrollableTabRow(
+                    selectedTabIndex = selectedIndex,
+                    edgePadding = 8.dp,
+                    indicator = { tabPositions ->
+                        TabRowDefaults.Indicator(
+                            Modifier
+                                .tabIndicatorOffset(tabPositions[selectedIndex])
+                                .height(2.dp),
+                            color = Color.Black
+                        )
+                    },
+                    divider = {}
+                ) {
+                    viewModel.treatmentCategories.forEachIndexed { index, category ->
+                        Tab(
+                            selected = selectedIndex == index,
+                            onClick = { viewModel.selectedCategory = category },
+                            text = { Text(category, color = Color.Black) }
+                        )
+                    }
+                }
+            }
+
+// 해당 카테고리에 속한 시술 카드 목록 표시
+            viewModel.filteredTreatmentList.forEach { treatment ->
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 6.dp)
+                        .clickable { viewModel.selectedTreatment = treatment }
+                        .then(
+                            if (viewModel.selectedTreatment == treatment)
+                                Modifier.border(2.dp, Color.Black, RoundedCornerShape(10.dp))
+                            else Modifier
+                        ),
+                    shape = RoundedCornerShape(10.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = if (viewModel.selectedTreatment == treatment)
+                            Color(0xFFE0E0E0)
+                        else Color.White
+                    )
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Text("시술명: ${treatment.name}", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text("가격: ${treatment.price}원", fontSize = 14.sp)
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text("설명: ${treatment.description}", fontSize = 13.sp, color = Color.DarkGray)
+                    }
+                }
+            }
+
+
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { viewModel.sameAsLastTime = !viewModel.sameAsLastTime }
+                    .padding(vertical = 4.dp)
+            ) {
+                Icon(
+                    imageVector = if (viewModel.sameAsLastTime) Icons.Default.CheckBox else Icons.Default.CheckBoxOutlineBlank,
+                    contentDescription = null
+                )
+                Text("이전처럼 잘라주세요", modifier = Modifier.padding(start = 8.dp))
+            }
+
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { viewModel.quietMode = !viewModel.quietMode }
+                    .padding(vertical = 4.dp)
+            ) {
+                Icon(
+                    imageVector = if (viewModel.quietMode) Icons.Default.CheckBox else Icons.Default.CheckBoxOutlineBlank,
+                    contentDescription = null
+                )
+                Text("조용한 시술을 원해요", modifier = Modifier.padding(start = 8.dp))
+            }
+
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Text("참고 이미지", fontWeight = FontWeight.SemiBold)
+
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                // 1. 내 사진
+                viewModel.userProfilePhotoUrl?.let { url ->
+                    AsyncImage(
+                        model = url,
+                        contentDescription = "내 사진",
+                        modifier = Modifier
+                            .size(100.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .border(1.dp, Color.Gray, RoundedCornerShape(12.dp))
+                    )
+                }
+
+                // 2. 참고 이미지 or + 박스
+                if (viewModel.referencePhotoUri == null) {
+                    Box(
+                        modifier = Modifier
+                            .size(100.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .border(1.dp, Color.Gray, RoundedCornerShape(12.dp))
+                            .clickable {
+                                // 포토피커 실행
+                                launcher.launch("image/*")
+                            },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text("+", fontSize = 32.sp, color = Color.Gray)
+                    }
+                } else {
+                    AsyncImage(
+                        model = viewModel.referencePhotoUri,
+                        contentDescription = "참고 이미지",
+                        modifier = Modifier
+                            .size(100.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .border(1.dp, Color.Gray, RoundedCornerShape(12.dp))
+                    )
+                }
+            }
+
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            var showConfirmDialog by remember { mutableStateOf(false) }
+
             Button(
                 onClick = {
-                    viewModel.submitReservation(
-                        onSuccess = {
-                            Toast.makeText(context, "예약 요청이 완료되었습니다.", Toast.LENGTH_SHORT).show()
-                        },
-                        onFailure = { error ->
-                            Toast.makeText(context, error, Toast.LENGTH_SHORT).show()
-                        }
-                    )
+                    showConfirmDialog = true
                 },
                 colors = ButtonDefaults.buttonColors(containerColor = Color.Black),
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(10.dp)
             ) {
                 Text("예약 확인", color = Color.White)
+            }
+
+            if (showConfirmDialog) {
+                AlertDialog(
+                    onDismissRequest = { showConfirmDialog = false },
+                    title = { Text("예약 확인") },
+                    text = { Text("이 예약을 미용실에 요청하시겠습니까?") },
+                    confirmButton = {
+                        TextButton(onClick = {
+                            showConfirmDialog = false
+                            viewModel.submitReservation(
+                                onSuccess = {
+                                    Toast.makeText(context, "예약 요청이 완료되었습니다.", Toast.LENGTH_SHORT).show()
+                                },
+                                onFailure = { error ->
+                                    Toast.makeText(context, error, Toast.LENGTH_SHORT).show()
+                                }
+                            )
+                        }) {
+                            Text("확인")
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { showConfirmDialog = false }) {
+                            Text("취소")
+                        }
+                    }
+                )
             }
         }
     }
@@ -181,7 +359,10 @@ fun DashboardScreen(viewModel: GuestDashboardViewModel = viewModel()) {
             reservedSlots = viewModel.reservedTimeSlots,
             onDismiss = { showCustomTimeDialog = false },
             onTimeSelected = { selectedTime ->
-                rescheduleCalendar.set(Calendar.HOUR_OF_DAY, selectedTime.substringBefore(":").toInt())
+                rescheduleCalendar.set(
+                    Calendar.HOUR_OF_DAY,
+                    selectedTime.substringBefore(":").toInt()
+                )
                 rescheduleCalendar.set(Calendar.MINUTE, 0)
                 rescheduleCalendar.set(Calendar.SECOND, 0)
                 rescheduleCalendar.set(Calendar.MILLISECOND, 0)
@@ -200,6 +381,7 @@ fun DashboardScreen(viewModel: GuestDashboardViewModel = viewModel()) {
         )
     }
 }
+
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -228,7 +410,7 @@ fun Nextmyreservation(
     salonName: String,
     reservationDate: String,
     reservationTime: String,
-    onRescheduleClick: () -> Unit
+    onRescheduleClick: () -> Unit,
 ) {
     Box(
         modifier = Modifier
@@ -243,13 +425,22 @@ fun Nextmyreservation(
                     .padding(vertical = 18.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+                Column(
+                    modifier = Modifier.weight(1f),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
                     Text(text = customerName, color = Color.Gray, fontSize = 15.sp)
                 }
-                Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+                Column(
+                    modifier = Modifier.weight(1f),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
                     Text(text = reservationDate, color = Color.Gray, fontSize = 15.sp)
                 }
-                Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+                Column(
+                    modifier = Modifier.weight(1f),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
                     Text(text = reservationTime, color = Color.Gray, fontSize = 15.sp)
                 }
             }
@@ -261,7 +452,10 @@ fun Nextmyreservation(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceEvenly
             ) {
-                Text("Reschedule", fontSize = 14.sp, modifier = Modifier.clickable { onRescheduleClick() })
+                Text(
+                    "Reschedule",
+                    fontSize = 14.sp,
+                    modifier = Modifier.clickable { onRescheduleClick() })
                 Text("Cancel", fontSize = 14.sp)
                 Text("Add Note", fontSize = 14.sp)
             }

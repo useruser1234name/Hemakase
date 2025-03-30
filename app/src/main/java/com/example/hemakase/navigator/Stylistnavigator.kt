@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CalendarToday
-import androidx.compose.material.icons.filled.Group
 import androidx.compose.material.icons.filled.Message
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Divider
@@ -16,16 +15,14 @@ import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.example.hemakase.ui.theme.BaberSchedulerScreen
 import com.example.hemakase.ui.theme.BarberSettingsScreenClientsTab
+import com.example.hemakase.ui.theme.ChatListScreen
+import com.example.hemakase.ui.theme.ChatRoomScreen
 import com.example.hemakase.ui.theme.DashboardTopBar
 
 @Composable
@@ -61,6 +58,7 @@ fun StylistBottomBar(
 @Composable
 fun BaberDashboardScreen() {
     var selectedTab by remember { mutableStateOf(0) }
+    var selectedRoomId by remember { mutableStateOf("") }
 
     Scaffold(
         topBar = { DashboardTopBar() },
@@ -71,20 +69,25 @@ fun BaberDashboardScreen() {
             )
         }
     ) { innerPadding ->
-        Box(modifier = Modifier
-            .fillMaxSize()
-            .background(Color.White)
-            .padding(innerPadding)) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.White)
+                .padding(innerPadding)
+        ) {
             when (selectedTab) {
                 0 -> BaberSchedulerScreen(
                     selectedTab = selectedTab,
                     onTabSelected = { selectedTab = it }
                 )
-                // 1 -> MessageScreen()
-                2 -> BarberSettingsScreenClientsTab(
-//                    selectedTab = selectedTab,
-//                    onTabSelected = { selectedTab = it }
+                1 -> ChatListScreen(
+                    onChatClick = { roomId ->
+                        selectedRoomId = roomId
+                        selectedTab = 3
+                    }
                 )
+                2 -> BarberSettingsScreenClientsTab()
+                3 -> ChatRoomScreen(roomId = selectedRoomId)
             }
         }
     }

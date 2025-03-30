@@ -8,8 +8,10 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.hemakase.data.User
 import com.example.hemakase.data.Salon
+import com.google.firebase.Firebase
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.firestore
 import com.google.firebase.storage.FirebaseStorage
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -49,6 +51,32 @@ class RegisterViewModel : ViewModel() {
         tempProfileUri = profileUri
     }
 
+    fun createInitialChatRooms(customerId: String, stylistId: String, salonId: String) {
+        val db = Firebase.firestore
+        val chatRoomsRef = db.collection("chat_rooms")
+
+        // (1) 고객 ↔ 미용사
+        val stylistRoom = mapOf(
+            "participants" to listOf(customerId, stylistId),
+            "createdAt" to System.currentTimeMillis()
+        )
+        chatRoomsRef.add(stylistRoom)
+
+        // (2) 고객 ↔ 미용실 관리자
+        db.collection("salons").document(salonId).get()
+            .addOnSuccessListener { salonDoc ->
+                val stylistIds = salonDoc.get("stylistIds") as? List<String>
+                val ownerId = stylistIds?.getOrNull(0) // 인덱스 0이 관리자
+
+                ownerId?.let {
+                    val ownerRoom = mapOf(
+                        "participants" to listOf(customerId, it),
+                        "createdAt" to System.currentTimeMillis()
+                    )
+                    chatRoomsRef.add(ownerRoom)
+                }
+            }
+    }
 
     fun registerUser(
         name: String,
@@ -62,7 +90,6 @@ class RegisterViewModel : ViewModel() {
         selectedSalonId: String? = null,
         selectedStylistId: String,
         selectedStylistName: String
-
     ) {
         viewModelScope.launch {
             try {
@@ -88,8 +115,6 @@ class RegisterViewModel : ViewModel() {
                         null
                     }
                 }
-
-
 
                 if (isHairdresser) {
                     // 미용사 → 미용실 등록 또는 선택
@@ -120,6 +145,7 @@ class RegisterViewModel : ViewModel() {
                     )
 
                     db.collection("users").document(uid).set(user).await()
+
                 } else {
                     // 고객 → salonId 선택 필요
                     val user = User(
@@ -136,6 +162,13 @@ class RegisterViewModel : ViewModel() {
                     )
 
                     db.collection("users").document(uid).set(user).await()
+
+                    // ✅ 채팅방 자동 생성 추가
+                    createInitialChatRooms(
+                        customerId = uid,
+                        stylistId = selectedStylistId,
+                        salonId = selectedSalonId ?: ""
+                    )
                 }
 
                 _registerSuccess.value = true
