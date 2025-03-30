@@ -1,5 +1,6 @@
 package com.example.hemakase.viewmodel
 
+import android.net.Uri
 import android.util.Log
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -38,9 +39,13 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.hemakase.data.Treatment
+import com.example.hemakase.repository.FirebaseRepository
+import com.google.firebase.Firebase
 import com.google.firebase.Timestamp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.firestore
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import java.text.SimpleDateFormat
@@ -52,7 +57,6 @@ class GuestDashboardViewModel : ViewModel() {
     private val db = FirebaseFirestore.getInstance()
     private val auth = FirebaseAuth.getInstance()
 
-    // 예약 관련 상태
     var reservedYear by mutableStateOf<Int?>(null)
     var reservedMonth by mutableStateOf<Int?>(null)
     var reservedDay by mutableStateOf<Int?>(null)
@@ -62,25 +66,96 @@ class GuestDashboardViewModel : ViewModel() {
     var stylistName by mutableStateOf("")
     var salonName by mutableStateOf("")
 
-    // 선택된 날짜 상태
     var selectedYear by mutableStateOf(LocalDate.now().year)
     var selectedMonth by mutableStateOf(LocalDate.now().monthValue)
     var selectedDay by mutableStateOf<Int?>(null)
 
-    // 선택된 시간
     var selectedTime by mutableStateOf("")
 
-    // 예약된 시간 목록
     var reservedTimeSlots = mutableStateListOf<String>()
     var isReservedLoaded by mutableStateOf(false)
 
     var salonId by mutableStateOf<String?>(null)
 
+    var treatmentType by mutableStateOf("")
+    var sameAsLastTime by mutableStateOf(false)
+    var quietMode by mutableStateOf(false)
+    var referencePhotoUri by mutableStateOf<Uri?>(null)
+    var treatmentList by mutableStateOf<List<Treatment>>(emptyList())
+    var selectedTreatment by mutableStateOf<Treatment?>(null)
+    var treatmentCategories by mutableStateOf<List<String>>(emptyList())
+    var selectedCategory by mutableStateOf<String?>(null)
+    val filteredTreatmentList: List<Treatment>
+        get() = treatmentList.filter { it.category == selectedCategory }
 
-    fun loadLatestReservation() {
+    val treatmentName = selectedTreatment?.name ?: treatmentType
+    val note = when {
+        sameAsLastTime -> "이전 방문과 동일"
+        quietMode -> "조용한 시술 요청"
+        else -> ""
+    }
+
+    fun selectCategory(category: String) {
+        selectedCategory = category
+        selectedTreatment = null // 탭 바뀌면 선택 초기화
+    }
+
+
+    fun selectTreatment(treatment: Treatment) {
+        selectedTreatment = treatment
+    }
+
+
+    var userProfilePhotoUrl by mutableStateOf<String?>(null)
+
+    fun loadUserProfilePhoto(uid: String) {
         viewModelScope.launch {
             try {
                 val uid = auth.currentUser?.uid ?: return@launch
+                val userDoc = db.collection("users").document(uid).get().await()
+                userProfilePhotoUrl = userDoc.getString("photoUrl")
+                Log.d("프로필", "불러온 photoUrl: $userProfilePhotoUrl")
+            } catch (e: Exception) {
+                Log.e("프로필", "유저 사진 로드 실패: ${e.message}")
+            }
+        }
+    }
+
+    fun toggleQuietTreatment() {
+        quietMode = !quietMode
+    }
+
+    fun toggleSameAsLastTime() {
+        sameAsLastTime = !sameAsLastTime
+    }
+
+
+
+    fun loadTreatments() {
+        viewModelScope.launch {
+            try {
+                FirebaseRepository.addDefaultTreatmentsIfEmpty()
+                val snapshot = Firebase.firestore.collection("treatments").get().await()
+                treatmentList = snapshot.documents.mapNotNull { it.toObject(Treatment::class.java) }
+                treatmentCategories = treatmentList.map { it.category }.distinct()
+                if (selectedCategory == null && treatmentCategories.isNotEmpty()) {
+                    selectedCategory = treatmentCategories.first()
+                }
+            } catch (e: Exception) {
+                Log.e("시술", "불러오기 실패: ${e.message}")
+            }
+        }
+    }
+
+    fun loadLatestReservation() {
+        viewModelScope.launch {
+            val uid = auth.currentUser?.uid
+            if (uid == null) {
+                Log.w("GuestDashboardViewModel", "로그인된 유저 없음")
+                return@launch
+            }
+
+            try {
                 val snapshot = db.collection("reservations")
                     .whereEqualTo("customer_id", uid)
                     .orderBy("date")
@@ -105,17 +180,16 @@ class GuestDashboardViewModel : ViewModel() {
                         val salonDoc = db.collection("salons").document(it).get().await()
                         salonName = salonDoc.getString("name") ?: ""
                     }
-
                 }
+
+                loadUserProfilePhoto(uid)
+                loadTreatments()
             } catch (e: Exception) {
                 Log.e("예약", "불러오기 실패: ${e.message}")
             }
         }
     }
 
-
-
-    // 예약된 시간 불러오기
     fun loadReservedSlots(salonId: String?, stylistId: String?) {
         viewModelScope.launch {
             isReservedLoaded = false
@@ -149,7 +223,6 @@ class GuestDashboardViewModel : ViewModel() {
                     reservedTimeSlots.addAll(snapshot.documents.mapNotNull {
                         it.getTimestamp("date")?.toDate()?.let(formatter::format)
                     })
-
                     isReservedLoaded = true
                 } catch (e: Exception) {
                     Log.e("예약슬롯", "불러오기 실패: ${e.message}")
@@ -158,15 +231,23 @@ class GuestDashboardViewModel : ViewModel() {
         }
     }
 
-
+    // GuestDashboardViewModel 안에서 submitReservation 수정
     fun submitReservation(onSuccess: () -> Unit, onFailure: (String) -> Unit) {
         viewModelScope.launch {
             try {
-                val uid = auth.currentUser?.uid ?: return@launch
-                val stylistId = stylistName
-                val salonId = salonId // 임시. 나중엔 salonId 상태로 따로 분리 추천
+                val uid = auth.currentUser?.uid ?: return@launch onFailure("로그인된 사용자 없음")
 
-                // 날짜 + 시간 조합
+                // 🔥 유저 정보 가져오기
+                val userDoc = db.collection("users").document(uid).get().await()
+                val customerName = userDoc.getString("name") ?: ""
+                val salonId = userDoc.getString("salonId")
+                val salonName = salonId?.let {
+                    val salonDoc = db.collection("salons").document(it).get().await()
+                    salonDoc.getString("name") ?: ""
+                } ?: ""// 필요시 추가 조회
+                val stylistId = userDoc.getString("stylistId") ?: ""
+                val stylistName = userDoc.getString("stylistName") ?: ""
+
                 if (selectedDay == null || selectedTime.isBlank()) {
                     onFailure("날짜와 시간을 모두 선택해주세요.")
                     return@launch
@@ -176,7 +257,7 @@ class GuestDashboardViewModel : ViewModel() {
                 val formatter = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.KOREAN)
                 val timestamp = Timestamp(formatter.parse(dateTimeStr)!!)
 
-                // 중복 체크
+                // 예약 중복 확인 (필요 시 유지)
                 val start = Calendar.getInstance().apply { time = timestamp.toDate(); add(Calendar.MINUTE, -1) }.time
                 val end = Calendar.getInstance().apply { time = timestamp.toDate(); add(Calendar.MINUTE, 1) }.time
 
@@ -194,17 +275,31 @@ class GuestDashboardViewModel : ViewModel() {
                     return@launch
                 }
 
+                val treatment = selectedTreatment ?: return@launch onFailure("시술이 선택되지 않음")
+
+                val note = when {
+                    sameAsLastTime -> "이전 방문과 동일"
+                    quietMode -> "조용한 시술 요청"
+                    else -> ""
+                }
+
+                val referencePhotoUrl = referencePhotoUri?.toString() // 추후 Storage 업로드 시 처리 필요
+
                 val reservation = hashMapOf(
                     "customer_id" to uid,
                     "customer_name" to customerName,
                     "stylist_id" to stylistId,
                     "stylist_name" to stylistName,
                     "salonId" to salonId,
+                    "salonName" to salonName,
                     "date" to timestamp,
                     "status" to "pending",
-                    "style" to "",
-                    "note" to "",
-                    "reference_photo" to null
+                    "style" to treatment.name,
+                    "note" to note,
+                    "reference_photo" to referencePhotoUrl,
+                    "treatmentName" to treatment.name,
+                    "treatmentDescription" to treatment.description,
+                    "treatmentPrice" to treatment.price
                 )
 
                 db.collection("reservations").add(reservation).await()
@@ -216,7 +311,12 @@ class GuestDashboardViewModel : ViewModel() {
         }
     }
 
-    fun rescheduleReservation(newDateTime: Calendar, onSuccess: () -> Unit, onFailure: (String) -> Unit) {
+
+    fun rescheduleReservation(
+        newDateTime: Calendar,
+        onSuccess: () -> Unit,
+        onFailure: (String) -> Unit,
+    ) {
         viewModelScope.launch {
             try {
                 val uid = auth.currentUser?.uid ?: return@launch
@@ -233,7 +333,6 @@ class GuestDashboardViewModel : ViewModel() {
                     val docRef = snapshot.documents[0].reference
                     docRef.update("date", timestamp).await()
 
-                    // 상태도 업데이트
                     reservedYear = newDateTime.get(Calendar.YEAR)
                     reservedMonth = newDateTime.get(Calendar.MONTH) + 1
                     reservedDay = newDateTime.get(Calendar.DAY_OF_MONTH)
@@ -248,24 +347,8 @@ class GuestDashboardViewModel : ViewModel() {
             }
         }
     }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 }
+
 
 @Composable
 fun CustomCalendarUI(
@@ -274,7 +357,7 @@ fun CustomCalendarUI(
     selectedDay: Int?,
     onDaySelected: (Int) -> Unit,
     onMonthChange: (Int) -> Unit,
-    onYearChange: (Int) -> Unit
+    onYearChange: (Int) -> Unit,
 ) {
     val validDays = when (selectedMonth) {
         2 -> if ((selectedYear % 4 == 0 && selectedYear % 100 != 0) || selectedYear % 400 == 0) 29 else 28
@@ -384,7 +467,10 @@ fun CustomCalendarUI(
                                             modifier = Modifier
                                                 .height(2.dp)
                                                 .width(20.dp)
-                                                .background(Color.Red, shape = RoundedCornerShape(1.dp))
+                                                .background(
+                                                    Color.Red,
+                                                    shape = RoundedCornerShape(1.dp)
+                                                )
                                         )
                                     }
                                 }
@@ -399,14 +485,12 @@ fun CustomCalendarUI(
 }
 
 
-
-
 @Composable
 fun MonthDropdown(
     selectedMonth: Int,
     selectedYear: Int,
     onMonthSelected: (Int) -> Unit,
-    onYearSelected: (Int) -> Unit
+    onYearSelected: (Int) -> Unit,
 ) {
     var monthExpanded by remember { mutableStateOf(false) }
     var yearExpanded by remember { mutableStateOf(false) }
@@ -467,7 +551,7 @@ fun MonthDropdown(
 fun TimeSelectDialog(
     reservedSlots: List<String>,
     onDismiss: () -> Unit,
-    onTimeSelected: (String) -> Unit
+    onTimeSelected: (String) -> Unit,
 ) {
     val allTimeOptions = listOf(
         "10:00", "11:00", "12:00", "13:00", "14:00",
