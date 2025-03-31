@@ -7,6 +7,7 @@ import com.example.hemakase.data.ChatMessage
 import com.example.hemakase.data.Message
 import com.example.hemakase.repository.FirebaseRepository
 import com.google.firebase.Timestamp
+import com.google.firebase.database.FirebaseDatabase
 import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -49,11 +50,71 @@ class ReservationApprovalViewModel : ViewModel() {
         }
     }
 
-    fun rejectReservation(reservation: Map<String, Any>) {
+    fun rejectReservation(reservation: Map<String, Any>, onSuccess: () -> Unit = {}) {
         viewModelScope.launch {
             val docId = reservation["docId"] as? String ?: return@launch
+            val customerId = reservation["customer_id"] as? String ?: return@launch
+            val customerName = reservation["customer_name"] as? String ?: "고객"
+            val stylistId = reservation["stylist_id"] as? String ?: return@launch
+            val time = (reservation["date"] as? Timestamp)?.toDate()?.toString() ?: "시간 미정"
+
             try {
-                db.collection("reservations").document(docId).update("status", "rejected").await()
+                // 1. 예약 상태 업데이트
+                db.collection("reservations").document(docId)
+                    .update("status", "rejected").await()
+
+                // 2. 메시지 전송 대상: 오너 + 미용사 → 고객
+                val senderIds = listOf("owner", "stylist")
+                val senders = listOf(stylistId, /* ownerId 추출 예정 */)
+
+                // 🔍 오너 ID 가져오기 (salonId 기반)
+                val salonId = reservation["salonId"] as? String
+                val ownerId = salonId?.let {
+                    db.collection("salons").document(it).get().await().getString("ownerId")
+                }
+
+                val realSenders = listOfNotNull(stylistId, ownerId)
+
+                for (senderId in realSenders) {
+                    val messageText = "${customerName}님의 예약이 거절되었습니다. 시간: $time"
+                    val message = ChatMessage(
+                        senderId = "system", // 실제로는 senderId를 넘겨도 OK
+                        receiverId = customerId,
+                        message = messageText,
+                        timestamp = System.currentTimeMillis(),
+                        isRead = false,
+                        type = "notification"
+                    )
+
+                    // Firestore 메시지 저장
+                    FirebaseRepository.sendMessage(message)
+
+                    // Realtime DB 저장
+                    val chatRoomQuery = db.collection("chat_rooms")
+                        .whereArrayContains("participants", customerId)
+                        .get().await()
+                    val roomId = chatRoomQuery.documents.firstOrNull()?.id
+
+                    if (!roomId.isNullOrBlank()) {
+                        val realtimeDb = FirebaseDatabase.getInstance()
+                            .getReference("chat_rooms/$roomId/messages")
+                        realtimeDb.push().setValue(message).await()
+                    }
+
+                    // FCM 전송
+                    val userDoc = db.collection("users").document(customerId).get().await()
+                    val fcmToken = userDoc.getString("fcmToken")
+                    if (!fcmToken.isNullOrBlank()) {
+                        FirebaseRepository.sendPushNotification(
+                            token = fcmToken,
+                            title = "예약 거절 안내",
+                            body = messageText
+                        )
+                    }
+                }
+
+                onSuccess()
+
             } catch (e: Exception) {
                 Log.e("ReservationVM", "거절 실패: ${e.message}")
             }
@@ -61,47 +122,75 @@ class ReservationApprovalViewModel : ViewModel() {
     }
 
 
+
     fun approveReservation(reservation: Map<String, Any>, onSuccess: () -> Unit) {
         viewModelScope.launch {
-            val docId = reservation["docId"] as String
+            val docId = reservation["docId"] as? String
             if (docId == null) {
                 Log.e("ReservationVM", "docId 없음")
                 return@launch
             }
+
             val customerId = reservation["customer_id"] as? String ?: return@launch
             val customerName = reservation["customer_name"] as? String ?: "고객"
+            val stylistId = reservation["stylist_id"] as? String ?: return@launch
             val time = (reservation["date"] as? Timestamp)?.toDate()?.toString() ?: "시간 미정"
 
             try {
-                db.collection("reservations").document(docId).update("status", "confirmed").await()
+                // 1. 예약 상태 업데이트
+                db.collection("reservations").document(docId)
+                    .update("status", "confirmed").await()
 
-                // 채팅 메시지 전송
-                val message = ChatMessage(
-                    senderId = "system",
-                    receiverId = customerId,  // 반드시 포함!
-                    message = "${customerName}님의 예약이 확정되었습니다. 시간: $time",
-                    timestamp = System.currentTimeMillis(),
-                    isRead = false,
-                    type = "notification"
+                // 2. 수신 대상 목록 구성 (고객 + 미용사)
+                val targets = listOf(
+                    Triple(customerId, "${customerName}님의 예약이 확정되었습니다. 시간: $time", "고객"),
+                    Triple(stylistId, "${customerName}님의 예약이 확정되어 미용사님에게 전달되었습니다.", "미용사")
                 )
-                FirebaseRepository.sendMessage(message)
 
-                // FCM 푸시 전송
-                val userDoc = db.collection("users").document(customerId).get().await()
-                val fcmToken = userDoc.getString("fcmToken")
-
-                if (!fcmToken.isNullOrBlank()) {
-                    FirebaseRepository.sendPushNotification(
-                        token = fcmToken,
-                        title = "예약 확정 안내",
-                        body = "${customerName}님의 예약이 확정되었습니다. 시간: $time"
+                for ((receiverId, messageText, label) in targets) {
+                    // 메시지 생성
+                    val message = ChatMessage(
+                        senderId = "system",
+                        receiverId = receiverId,
+                        message = messageText,
+                        timestamp = System.currentTimeMillis(),
+                        isRead = false,
+                        type = "notification"
                     )
+
+                    // Firestore 메시지 저장
+                    FirebaseRepository.sendMessage(message)
+
+                    // Realtime DB 저장
+                    val chatRoomQuery = db.collection("chat_rooms")
+                        .whereArrayContains("participants", receiverId)
+                        .get().await()
+                    val matchingRoomId = chatRoomQuery.documents.firstOrNull()?.id
+
+                    if (!matchingRoomId.isNullOrBlank()) {
+                        val realtimeDb = com.google.firebase.database.FirebaseDatabase.getInstance()
+                            .reference.child("chat_rooms").child(matchingRoomId).child("messages")
+                        realtimeDb.push().setValue(message).await()
+                    }
+
+                    // FCM 푸시 알림
+                    val userDoc = db.collection("users").document(receiverId).get().await()
+                    val fcmToken = userDoc.getString("fcmToken")
+                    if (!fcmToken.isNullOrBlank()) {
+                        FirebaseRepository.sendPushNotification(
+                            token = fcmToken,
+                            title = "예약 확정 안내",
+                            body = messageText
+                        )
+                    }
                 }
 
                 onSuccess()
+
             } catch (e: Exception) {
-                Log.e("ReservationVM", "수락 실패: ${e.message}")
+                Log.e("ReservationVM", "예약 확정 실패: ${e.message}")
             }
         }
     }
+
 }

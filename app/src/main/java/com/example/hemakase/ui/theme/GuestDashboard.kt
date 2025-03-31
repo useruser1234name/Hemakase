@@ -3,6 +3,7 @@
 package com.example.hemakase.ui.theme
 
 import android.app.DatePickerDialog
+import android.content.Context
 import android.net.Uri
 import android.util.Log
 import android.widget.Toast
@@ -89,7 +90,9 @@ fun DashboardScreen(viewModel: GuestDashboardViewModel = viewModel()) {
                 reservationTime = viewModel.reservedTime.ifBlank { "시간 없음" },
                 onRescheduleClick = {
                     showDatePicker = true
-                }
+                },
+                viewModel = viewModel,
+                context = context
             )
 
             Spacer(modifier = Modifier.height(24.dp))
@@ -201,11 +204,19 @@ fun DashboardScreen(viewModel: GuestDashboardViewModel = viewModel()) {
                     )
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
-                        Text("시술명: ${treatment.name}", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                        Text(
+                            "시술명: ${treatment.name}",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 16.sp
+                        )
                         Spacer(modifier = Modifier.height(6.dp))
                         Text("가격: ${treatment.price}원", fontSize = 14.sp)
                         Spacer(modifier = Modifier.height(4.dp))
-                        Text("설명: ${treatment.description}", fontSize = 13.sp, color = Color.DarkGray)
+                        Text(
+                            "설명: ${treatment.description}",
+                            fontSize = 13.sp,
+                            color = Color.DarkGray
+                        )
                     }
                 }
             }
@@ -317,7 +328,8 @@ fun DashboardScreen(viewModel: GuestDashboardViewModel = viewModel()) {
                             showConfirmDialog = false
                             viewModel.submitReservation(
                                 onSuccess = {
-                                    Toast.makeText(context, "예약 요청이 완료되었습니다.", Toast.LENGTH_SHORT).show()
+                                    Toast.makeText(context, "예약 요청이 완료되었습니다.", Toast.LENGTH_SHORT)
+                                        .show()
                                 },
                                 onFailure = { error ->
                                     Toast.makeText(context, error, Toast.LENGTH_SHORT).show()
@@ -372,6 +384,11 @@ fun DashboardScreen(viewModel: GuestDashboardViewModel = viewModel()) {
                     newDateTime = rescheduleCalendar,
                     onSuccess = {
                         Toast.makeText(context, "예약이 수정되었습니다.", Toast.LENGTH_SHORT).show()
+
+                        viewModel.notifyReservationChange(
+                            reservation = viewModel.latestReservation,
+                            isCancel = false
+                        )
                     },
                     onFailure = {
                         Toast.makeText(context, it, Toast.LENGTH_SHORT).show()
@@ -411,6 +428,8 @@ fun Nextmyreservation(
     reservationDate: String,
     reservationTime: String,
     onRescheduleClick: () -> Unit,
+    viewModel: GuestDashboardViewModel,
+    context: Context
 ) {
     Box(
         modifier = Modifier
@@ -456,7 +475,28 @@ fun Nextmyreservation(
                     "Reschedule",
                     fontSize = 14.sp,
                     modifier = Modifier.clickable { onRescheduleClick() })
-                Text("Cancel", fontSize = 14.sp)
+                Text(
+                    "Cancel",
+                    fontSize = 14.sp,
+                    modifier = Modifier.clickable {
+                        viewModel.cancelReservation(
+                            onSuccess = {
+                                Toast.makeText(context, "예약이 취소되었습니다.", Toast.LENGTH_SHORT).show()
+
+                                // 🔔 알림 전송
+                                viewModel.notifyReservationChange(
+                                    reservation = viewModel.latestReservation,
+                                    isCancel = true
+                                )
+                            },
+                            onFailure = { error ->
+                                Toast.makeText(context, error, Toast.LENGTH_SHORT).show()
+                            }
+                        )
+                    }
+                )
+
+
                 Text("Add Note", fontSize = 14.sp)
             }
         }

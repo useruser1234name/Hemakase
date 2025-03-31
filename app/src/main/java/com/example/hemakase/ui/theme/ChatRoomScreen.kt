@@ -7,6 +7,7 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
@@ -37,12 +38,39 @@ fun ChatRoomScreen(roomId: String) {
             .weight(1f)
             .verticalScroll(rememberScrollState())) {
             messages.forEach { msg ->
-                Text(
-                    text = msg.message,
-                    fontWeight = if (msg.senderId == FirebaseAuth.getInstance().currentUser?.uid) FontWeight.Bold else FontWeight.Normal,
-                    modifier = Modifier.padding(vertical = 4.dp)
-                )
+                if (msg.type == "notification") {
+                    // 예약 확정 알림 메시지 스타일
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 8.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "${msg.message}",
+                            color = Color.DarkGray,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                } else {
+                    // 일반 메시지 말풍선 (오른쪽/왼쪽 정렬)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = if (msg.senderId == FirebaseAuth.getInstance().currentUser?.uid)
+                            Arrangement.End else Arrangement.Start
+                    ) {
+                        Text(
+                            text = msg.message,
+                            modifier = Modifier
+                                .padding(6.dp)
+                                .background(Color(0xFFEDEDED), shape = MaterialTheme.shapes.small)
+                                .padding(10.dp),
+                            color = Color.Black
+                        )
+                    }
+                }
             }
+
         }
 
         // 입력창

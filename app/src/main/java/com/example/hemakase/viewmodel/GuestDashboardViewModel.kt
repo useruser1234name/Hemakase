@@ -39,11 +39,13 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.hemakase.data.ChatMessage
 import com.example.hemakase.data.Treatment
 import com.example.hemakase.repository.FirebaseRepository
 import com.google.firebase.Firebase
 import com.google.firebase.Timestamp
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.database.FirebaseDatabase
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.firestore
 import kotlinx.coroutines.launch
@@ -87,6 +89,9 @@ class GuestDashboardViewModel : ViewModel() {
     var selectedCategory by mutableStateOf<String?>(null)
     val filteredTreatmentList: List<Treatment>
         get() = treatmentList.filter { it.category == selectedCategory }
+
+    var latestReservation by mutableStateOf<Map<String, Any>>(emptyMap())
+
 
     val treatmentName = selectedTreatment?.name ?: treatmentType
     val note = when {
@@ -147,6 +152,76 @@ class GuestDashboardViewModel : ViewModel() {
         }
     }
 
+    fun notifyReservationChange(
+        reservation: Map<String, Any>,
+        isCancel: Boolean,
+        onSuccess: () -> Unit = {}
+    ) {
+        viewModelScope.launch {
+            val customerId = reservation["customer_id"] as? String ?: return@launch
+            val customerName = reservation["customer_name"] as? String ?: "고객"
+            val stylistId = reservation["stylist_id"] as? String ?: return@launch
+            val salonId = reservation["salonId"] as? String ?: return@launch
+            val time = (reservation["date"] as? Timestamp)?.toDate()?.toString() ?: "시간 미정"
+
+            try {
+                // 🔹 오너 ID 조회
+                val salonDoc = db.collection("salons").document(salonId).get().await()
+                val ownerId = salonDoc.getString("ownerId") ?: return@launch
+
+                // 🔸 전송 대상: 오너 + 미용사
+                val targets = listOf(ownerId, stylistId)
+
+                for (receiverId in targets) {
+                    val messageText = if (isCancel)
+                        "${customerName}님이 예약을 취소했습니다. 시간: $time"
+                    else
+                        "${customerName}님이 예약을 변경했습니다. 시간: $time"
+
+                    val message = ChatMessage(
+                        senderId = "system",
+                        receiverId = receiverId,
+                        message = messageText,
+                        timestamp = System.currentTimeMillis(),
+                        isRead = false,
+                        type = "notification"
+                    )
+
+                    // Firestore 저장
+                    FirebaseRepository.sendMessage(message)
+
+                    // Realtime DB 저장
+                    val chatRoomQuery = db.collection("chat_rooms")
+                        .whereArrayContains("participants", receiverId)
+                        .get().await()
+                    val roomId = chatRoomQuery.documents.firstOrNull()?.id
+                    if (!roomId.isNullOrBlank()) {
+                        val realtimeDb = FirebaseDatabase.getInstance()
+                            .getReference("chat_rooms/$roomId/messages")
+                        realtimeDb.push().setValue(message).await()
+                    }
+
+                    // FCM 전송
+                    val userDoc = db.collection("users").document(receiverId).get().await()
+                    val fcmToken = userDoc.getString("fcmToken")
+                    if (!fcmToken.isNullOrBlank()) {
+                        FirebaseRepository.sendPushNotification(
+                            token = fcmToken,
+                            title = if (isCancel) "예약 취소 알림" else "예약 변경 알림",
+                            body = messageText
+                        )
+                    }
+                }
+
+                onSuccess()
+
+            } catch (e: Exception) {
+                Log.e("ReservationVM", "예약 변경/취소 알림 실패: ${e.message}")
+            }
+        }
+    }
+
+
     fun loadLatestReservation() {
         viewModelScope.launch {
             val uid = auth.currentUser?.uid
@@ -165,6 +240,10 @@ class GuestDashboardViewModel : ViewModel() {
 
                 if (!snapshot.isEmpty) {
                     val res = snapshot.documents[0]
+
+                    latestReservation = res.data!! + ("docId" to res.id)
+
+
                     val time = res.getTimestamp("date")?.toDate()
                     time?.let {
                         val cal = Calendar.getInstance().apply { this.time = it }
@@ -189,6 +268,30 @@ class GuestDashboardViewModel : ViewModel() {
             }
         }
     }
+
+    fun cancelReservation(
+        onSuccess: () -> Unit,
+        onFailure: (String) -> Unit
+    ) {
+        viewModelScope.launch {
+            try {
+                val docId = latestReservation["docId"] as? String
+                if (docId.isNullOrBlank()) {
+                    onFailure("예약 정보가 없습니다.")
+                    return@launch
+                }
+
+                db.collection("reservations").document(docId)
+                    .update("status", "cancelled")
+                    .await()
+
+                onSuccess()
+            } catch (e: Exception) {
+                onFailure("예약 취소 실패: ${e.message}")
+            }
+        }
+    }
+
 
     fun loadReservedSlots(salonId: String?, stylistId: String?) {
         viewModelScope.launch {
