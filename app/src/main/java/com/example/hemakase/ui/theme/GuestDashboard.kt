@@ -258,48 +258,67 @@ fun DashboardScreen(viewModel: GuestDashboardViewModel = viewModel()) {
 
             Text("참고 이미지", fontWeight = FontWeight.SemiBold)
 
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                // 1. 내 사진
-                viewModel.userProfilePhotoUrl?.let { url ->
-                    AsyncImage(
-                        model = url,
-                        contentDescription = "내 사진",
-                        modifier = Modifier
-                            .size(100.dp)
-                            .clip(RoundedCornerShape(12.dp))
-                            .border(1.dp, Color.Gray, RoundedCornerShape(12.dp))
-                    )
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ){
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    // 1. 내 사진
+                    viewModel.userProfilePhotoUrl.value?.let { url ->  //
+                        AsyncImage(
+                            model = url,
+                            contentDescription = "내 사진",
+                            modifier = Modifier
+                                .size(180.dp)
+                                .clip(RoundedCornerShape(12.dp))
+                                .border(1.dp, Color.Gray, RoundedCornerShape(12.dp))
+                        )
+                    }
+
+
+                    // 2. 참고 이미지 or + 박스
+                    if (viewModel.referencePhotoUri == null) {
+                        Box(
+                            modifier = Modifier
+                                .size(180.dp)
+                                .clip(RoundedCornerShape(12.dp))
+                                .border(1.dp, Color.Gray, RoundedCornerShape(12.dp))
+                                .clickable {
+                                    // 포토피커 실행
+                                    launcher.launch("image/*")
+                                },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text("+", fontSize = 32.sp, color = Color.Gray)
+                        }
+                    } else {
+                        AsyncImage(
+                            model = viewModel.referencePhotoUri,
+                            contentDescription = "참고 이미지",
+                            modifier = Modifier
+                                .size(180.dp)
+                                .clip(RoundedCornerShape(12.dp))
+                                .border(1.dp, Color.Gray, RoundedCornerShape(12.dp))
+                        )
+                    }
                 }
 
-                // 2. 참고 이미지 or + 박스
-                if (viewModel.referencePhotoUri == null) {
-                    Box(
-                        modifier = Modifier
-                            .size(100.dp)
-                            .clip(RoundedCornerShape(12.dp))
-                            .border(1.dp, Color.Gray, RoundedCornerShape(12.dp))
-                            .clickable {
-                                // 포토피커 실행
-                                launcher.launch("image/*")
-                            },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text("+", fontSize = 32.sp, color = Color.Gray)
-                    }
-                } else {
-                    AsyncImage(
-                        model = viewModel.referencePhotoUri,
-                        contentDescription = "참고 이미지",
-                        modifier = Modifier
-                            .size(100.dp)
-                            .clip(RoundedCornerShape(12.dp))
-                            .border(1.dp, Color.Gray, RoundedCornerShape(12.dp))
-                    )
+                Spacer(modifier = Modifier.height(16.dp))
+
+                Box(
+                    modifier = Modifier
+                        .size(400.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .border(1.dp, Color.Gray, RoundedCornerShape(12.dp)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text("역이에용사님 모델 호출 되는 곳 호에에엥", fontSize = 32.sp, color = Color.Gray)
                 }
+
             }
 
 
