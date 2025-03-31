@@ -4,22 +4,17 @@ package com.example.hemakase.ui.theme
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.*
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.*
-import com.example.hemakase.navigator.DashboardBottomBar
-import com.example.hemakase.navigator.StylistBottomBar
 import com.google.firebase.Timestamp
 import com.google.firebase.firestore.ktx.firestore
 import com.google.firebase.ktx.Firebase
@@ -46,6 +41,7 @@ fun BaberSchedulerScreen(
 ) {
     var selectedDate by remember { mutableStateOf(LocalDate.now()) }
     var appointments by remember { mutableStateOf<List<Appointment>>(emptyList()) }
+    var showDialog by remember { mutableStateOf(false) }
 
     val dateFormatter = DateTimeFormatter.ofPattern("yyyy.MM.dd (E)")
     val formattedDate = selectedDate.format(dateFormatter)
@@ -87,11 +83,31 @@ fun BaberSchedulerScreen(
                 Text(
                     text = formattedDate,
                     style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.clickable {
+                        showDialog = true
+                    }
                 )
                 IconButton(onClick = { selectedDate = selectedDate.plusDays(1) }) {
                     Text(text = "→")
                 }
+            }
+            if (showDialog) {
+                AlertDialog(
+                    onDismissRequest = { showDialog = false },
+                    title = { Text("날짜 선택") },
+                    text = { Text("여기에 원하는 내용을 넣을 수 있어요.") },
+                    confirmButton = {
+                        TextButton(onClick = { showDialog = false }) {
+                            Text("확인")
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { showDialog = false }) {
+                            Text("취소")
+                        }
+                    }
+                )
             }
 
             Spacer(modifier = Modifier.height(8.dp))

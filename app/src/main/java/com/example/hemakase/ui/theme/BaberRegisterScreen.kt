@@ -1,11 +1,10 @@
 package com.example.hemakase.ui.theme
 
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.runtime.Composable
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -19,7 +18,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.drawscope.Stroke
+
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -31,48 +30,19 @@ import com.example.hemakase.R
 import com.example.hemakase.viewmodel.RegisterViewModel
 
 @Composable
-@Preview(showBackground = true)
-fun LoginScreenPreview() {
-    PersonalScreen()
-}
-
-@Composable
-fun TopBarWithBackArrow() {
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 8.dp)
-            .height(56.dp)
-    ) {
-        Image(
-            painter = painterResource(id = R.drawable.arrow_back),
-            contentDescription = "Back",
-            modifier = Modifier
-                .align(Alignment.CenterStart)
-                .size(24.dp)
-        )
-        Text(
-            text = "Register",
-            modifier = Modifier.align(Alignment.Center),
-            textAlign = TextAlign.Center,
-            fontSize = 17.sp,
-            fontWeight = FontWeight.Medium
-        )
-    }
-}
-
-@Composable
-fun PersonalScreen(
-    onNextClick: () -> Unit = {} // 다음 단계로 넘어갈 때 호출
+fun BaberRegisterScreen(
+    onNextClick: () -> Unit = {}
 ) {
-    val registerViewModel: RegisterViewModel = viewModel()
-    // 1) 사용자 입력 상태 정의
-    var name by remember { mutableStateOf("") }
-    var userId by remember { mutableStateOf("") }
-    var password by remember { mutableStateOf("") }
+    var salonSearch by remember { mutableStateOf("") }
+    var salonName by remember { mutableStateOf("") }
+    var salonAddress by remember { mutableStateOf("") }
     var phoneNumber by remember { mutableStateOf("") }
-    var address by remember { mutableStateOf("") }
-    var isHairdresser by remember { mutableStateOf(false) }
+
+    var allAgree by remember { mutableStateOf(false) }
+    var agreeService by remember { mutableStateOf(false) }
+    var agreePrivacy by remember { mutableStateOf(false) }
+    var agreeLocation by remember { mutableStateOf(false) }
+
     val scrollState = rememberScrollState()
 
     Column(
@@ -191,7 +161,7 @@ fun PersonalScreen(
         }
         // 4) 상단 타이틀
         Text(
-            text = "개인 정보",
+            text = "미용실 등록",
             fontSize = 20.sp,
             fontWeight = FontWeight.Bold,
             color = Color.Black,
@@ -201,136 +171,162 @@ fun PersonalScreen(
                 .padding(vertical = 8.dp)
         )
 
-        Spacer(modifier = Modifier.height(33.dp))
+        Spacer(modifier = Modifier.height(12.dp))
 
-        // 5) Name 입력
         OutlinedTextField(
-            value = name,
-            onValueChange = { name = it },
-            label = { Text("Name") },
-            modifier = Modifier.fillMaxWidth(),
-        )
-
-        Spacer(modifier = Modifier.height(30.dp))
-
-        // 6) ID 입력
-        OutlinedTextField(
-            value = userId,
-            onValueChange = { userId = it },
-            label = { Text("ID") },
+            value = salonSearch,
+            onValueChange = { salonSearch = it },
+            placeholder = { Text("미용실 검색") },
             modifier = Modifier.fillMaxWidth()
         )
 
-        Spacer(modifier = Modifier.height(30.dp))
+        Spacer(modifier = Modifier.height(12.dp))
 
-        // 7) Password 입력
-//        OutlinedTextField(
-//            value = password,
-//            onValueChange = { password = it },
-//            label = { Text("Password") },
-//            trailingIcon = {
-//                Image(
-//                    painter = painterResource(id = R.drawable.eye), // 원하는 이미지 리소스로 변경
-//                    contentDescription = "Trailing image",
-//                    modifier = Modifier.size(24.dp) // 원하는 크기로 조정
-//                )
-//            },
-//            modifier = Modifier.fillMaxWidth()
-//        )
+        OutlinedTextField(
+            value = salonName,
+            onValueChange = { salonName = it },
+            placeholder = { Text("미용실") },
+            modifier = Modifier.fillMaxWidth()
+        )
 
+        Spacer(modifier = Modifier.height(12.dp))
 
-        Spacer(modifier = Modifier.height(30.dp))
+        OutlinedTextField(
+            value = salonAddress,
+            onValueChange = { salonAddress = it },
+            placeholder = { Text("미용실 주소") },
+            modifier = Modifier.fillMaxWidth()
+        )
 
-        // 8) Phone number 입력 (+82 표시)
+        Spacer(modifier = Modifier.height(12.dp))
+
+        // 전화번호 입력
         Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth()
         ) {
             Image(
                 painter = painterResource(id = R.drawable.korea),
-                contentDescription = "Step 3",
-                modifier = Modifier.size(35.dp),
-                contentScale = ContentScale.Crop
+                contentDescription = "국기",
+                modifier = Modifier.size(30.dp)
             )
-            Text(
-                text = "+82",
-                fontSize = 15.sp,
-                modifier = Modifier.padding(start = 10.dp, end = 8.dp)
-            )
+            Text(text = "+82", modifier = Modifier.padding(start = 8.dp))
+            Spacer(modifier = Modifier.width(8.dp))
             OutlinedTextField(
                 value = phoneNumber,
                 onValueChange = { phoneNumber = it },
-                label = { Text("Phone number") },
+                placeholder = { Text("미용실 전화번호") },
                 modifier = Modifier.weight(1f)
             )
         }
 
-        Spacer(modifier = Modifier.height(30.dp))
+        Spacer(modifier = Modifier.height(24.dp))
 
-        // 9) Address 입력
-        OutlinedTextField(
-            value = address,
-            onValueChange = { address = it },
-            label = { Text("Address") },
-            leadingIcon = {
-                Image(
-                    painter = painterResource(id = R.drawable.location), // 이미지 리소스
-                    contentDescription = "Address image",
-                    modifier = Modifier
-                        .size(width = 13.dp, height = 18.dp)
-                )
-            },
-            modifier = Modifier.fillMaxWidth()
-        )
-
-        Spacer(modifier = Modifier.height(25.dp))
-
-        // 10) 미용사 입니다 체크박스
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(vertical = 8.dp),
+                .clickable {
+                    allAgree = !allAgree
+                    agreeService = allAgree
+                    agreePrivacy = allAgree
+                    agreeLocation = allAgree
+                }
+                .padding(vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Checkbox(
-                checked = isHairdresser,
-                onCheckedChange = { isHairdresser = it },
+            Text(
+                text = "전체동의",
+                fontSize = 24.sp
             )
-            Text(text = "미용사 입니다.")
+
+            Spacer(modifier = Modifier.weight(1f)) // 남는 공간 밀어주기
+
+            RadioButton(
+                selected = allAgree,
+                onClick = {
+                    allAgree = !allAgree
+                    agreeService = allAgree
+                    agreePrivacy = allAgree
+                    agreeLocation = allAgree
+                }
+            )
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
+        Divider()
 
-        // 11) Next 버튼
+        AgreementItem("필수", "서비스 이용약관", agreeService) {
+            agreeService = it
+            allAgree = agreeService && agreePrivacy && agreeLocation
+        }
+
+        AgreementItem("필수", "개인정보 수집 및 이용동의", agreePrivacy) {
+            agreePrivacy = it
+            allAgree = agreeService && agreePrivacy && agreeLocation
+        }
+
+        AgreementItem("선택", "위치 서비스 이용약관", agreeLocation) {
+            agreeLocation = it
+            allAgree = agreeService && agreePrivacy && agreeLocation
+        }
+
+        Spacer(modifier = Modifier.height(14.dp))
+
         Button(
-            onClick = {
-                // 회원가입 흐름 진행
-                registerViewModel.setTempUserInfo(
-                    name = name,
-                    phone = phoneNumber,
-                    address = address,
-                    isHairdresser = isHairdresser,
-                    profileUri = null // 나중에 CameraScreen에서 넣을 수 있음
-                )
-
-                onNextClick() // 다음 단계로 넘어가기 위한 콜백 (예: 사진 등록 등)
-            },
+            onClick = { onNextClick() },
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(vertical = 8.dp)
-                .height(60.dp),
-            shape = RoundedCornerShape(5.dp),
+                .height(56.dp),
+            shape = RoundedCornerShape(4.dp),
             colors = ButtonDefaults.buttonColors(
                 containerColor = Color.White,
-                contentColor = Color.Black,
+                contentColor = Color.Black
             ),
             border = BorderStroke(1.dp, Color.Black)
         ) {
-            Text(
-                text = "Next",
-                fontSize = 17.sp,
-                fontWeight = FontWeight.Medium
-            )
+            Text("Next")
         }
     }
 }
+
+@Composable
+fun AgreementItem(
+    label: String,
+    title: String,
+    checked: Boolean,
+    onCheckChanged: (Boolean) -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onCheckChanged(!checked) }
+            .padding(vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        // 텍스트 영역
+        Column {
+            Row {
+                Text(
+                    text = "$label ",
+                    color = if (label == "필수") Color(0xFF014421) else Color.Black,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 18.sp
+                )
+                Spacer(modifier = Modifier.width(23.dp))
+                Text(
+                    text = "$title  >",
+                    color = Color.Black,
+                    fontSize = 16.sp
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.weight(1f)) // 남는 공간 밀어주기
+
+        // 오른쪽에 RadioButton
+        RadioButton(
+            selected = checked,
+            onClick = { onCheckChanged(!checked) }
+        )
+    }
+}
+
