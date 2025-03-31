@@ -30,7 +30,7 @@ object FirebaseRepository {
 
     private val db = FirebaseFirestore.getInstance()
     private const val TAG = "FirebaseRepository"
-
+    private val realtimeDb = FirebaseDatabase.getInstance()
 
     suspend fun addDefaultTreatmentsIfEmpty() {
         val treatmentsRef = Firebase.firestore.collection("treatments")
@@ -95,6 +95,10 @@ object FirebaseRepository {
 //        }
 //    }
 
+    fun generateRoomId(userA: String, userB: String): String {
+        return if (userA < userB) "${userA}_$userB" else "${userB}_$userA"
+    }
+
     fun generateChatRoomId(senderId: String, receiverId: String, senderRole: String, receiverRole: String): String {
         return when {
             senderRole == "guest" && receiverRole == "owner" -> "${senderId}_owner"
@@ -104,27 +108,24 @@ object FirebaseRepository {
         }
     }
 
+
     suspend fun getOrCreateChatRoom(senderId: String, receiverId: String, senderRole: String, receiverRole: String): String {
-        val db = FirebaseFirestore.getInstance()
         val chatRoomId = generateChatRoomId(senderId, receiverId, senderRole, receiverRole)
+        val chatRoomRef = db.collection("chat_rooms").document(chatRoomId)
 
-        val querySnapshot = db.collection("chat_rooms")
-            .whereEqualTo("chatRoomId", chatRoomId)
-            .get()
-            .await()
-
-        return if (!querySnapshot.isEmpty) {
-            querySnapshot.documents.first().id
-        } else {
+        val doc = chatRoomRef.get().await()
+        if (!doc.exists()) {
             val newRoom = hashMapOf(
                 "chatRoomId" to chatRoomId,
                 "participants" to listOf(senderId, receiverId),
                 "createdAt" to System.currentTimeMillis()
             )
-            val newRoomRef = db.collection("chat_rooms").add(newRoom).await()
-            newRoomRef.id
+            chatRoomRef.set(newRoom).await()
         }
+
+        return chatRoomId
     }
+
 
 
     suspend fun getReservedTimes(
@@ -218,12 +219,12 @@ object FirebaseRepository {
                     senderRole = "guest",
                     receiverRole = receiverRole
                 )
-
                 FirebaseDatabase.getInstance()
                     .getReference("chat_rooms/$roomId/messages")
                     .push()
                     .setValue(message)
                     .await()
+
 
                 val userDoc = db.collection("users").document(receiverId).get().await()
                 val fcmToken = userDoc.getString("fcmToken")

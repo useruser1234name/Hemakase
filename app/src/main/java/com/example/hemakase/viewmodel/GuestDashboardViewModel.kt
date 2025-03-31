@@ -48,6 +48,7 @@ import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.database.FirebaseDatabase
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.firestore
+import com.google.firebase.storage.FirebaseStorage
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import java.text.SimpleDateFormat
@@ -58,6 +59,42 @@ import java.util.Locale
 class GuestDashboardViewModel : ViewModel() {
     private val db = FirebaseFirestore.getInstance()
     private val auth = FirebaseAuth.getInstance()
+
+    var userProfilePhotoUrl = mutableStateOf<String?>(null)
+        private set
+
+    fun uploadUserProfilePhoto(uid: String, localImageUri: Uri) {
+        val storageRef = FirebaseStorage.getInstance().reference.child("users/$uid/profile.jpg")
+        val uploadTask = storageRef.putFile(localImageUri)
+
+        uploadTask.addOnSuccessListener {
+            Log.d("Storage", "프로필 사진 업로드 성공!")
+            // 업로드 성공 후 downloadUrl 다시 요청
+            storageRef.downloadUrl
+                .addOnSuccessListener { uri ->
+                    Log.d("Firebase", "이미지 경로 OK: $uri")
+                    userProfilePhotoUrl.value = uri.toString()
+                }
+                .addOnFailureListener { e ->
+                    Log.e("Firebase", "이미지 로드 실패 - 경로 또는 권한 문제: ${e.message}")
+                }
+        }.addOnFailureListener {
+            Log.e("Storage", "업로드 실패: ${it.message}")
+        }
+    }
+
+    fun loadUserProfilePhoto(uid: String) {
+        viewModelScope.launch {
+            try {
+                val userDoc = db.collection("users").document(uid).get().await()
+                userProfilePhotoUrl.value = userDoc.getString("photo")
+                Log.d("Firebase", "Firestore에서 불러온 프로필: ${userProfilePhotoUrl.value}")
+            } catch (e: Exception) {
+                Log.e("Firebase", "프로필 이미지 로딩 실패: ${e.message}")
+            }
+        }
+    }
+
 
     var reservedYear by mutableStateOf<Int?>(null)
     var reservedMonth by mutableStateOf<Int?>(null)
@@ -92,7 +129,6 @@ class GuestDashboardViewModel : ViewModel() {
 
     var latestReservation by mutableStateOf<Map<String, Any>>(emptyMap())
 
-
     val treatmentName = selectedTreatment?.name ?: treatmentType
     val note = when {
         sameAsLastTime -> "이전 방문과 동일"
@@ -106,23 +142,9 @@ class GuestDashboardViewModel : ViewModel() {
     }
 
 
+
     fun selectTreatment(treatment: Treatment) {
         selectedTreatment = treatment
-    }
-
-
-    var userProfilePhotoUrl by mutableStateOf<String?>(null)
-
-    fun loadUserProfilePhoto(uid: String) {
-        viewModelScope.launch {
-            try {
-                val userDoc = db.collection("users").document(uid).get().await()
-                userProfilePhotoUrl = userDoc.getString("photoUrl")
-                Log.d("프로필", "불러온 photoUrl: $userProfilePhotoUrl")
-            } catch (e: Exception) {
-                Log.e("프로필", "유저 사진 로드 실패: ${e.message}")
-            }
-        }
     }
 
     fun toggleQuietTreatment() {
