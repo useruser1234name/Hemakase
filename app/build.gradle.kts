@@ -41,6 +41,19 @@ android {
     buildFeatures {
         compose = true
     }
+
+    packagingOptions {
+        exclude("META-INF/DEPENDENCIES")
+        exclude("META-INF/LICENSE")
+        exclude("META-INF/LICENSE.txt")
+        exclude("META-INF/license.txt")
+        exclude("META-INF/NOTICE")
+        exclude("META-INF/NOTICE.txt")
+        exclude("META-INF/notice.txt")
+    }
+
+
+
 }
 
 dependencies {
@@ -82,6 +95,7 @@ dependencies {
     implementation ("io.coil-kt:coil-compose:2.3.0")
     // build.gradle (app)
     implementation ("com.google.firebase:firebase-appcheck-playintegrity:17.0.1")
+    implementation ("com.google.api-client:google-api-client:1.34.1")
 
 
 

@@ -72,7 +72,7 @@ class MainActivity : ComponentActivity() {
 
                                 currentScreen = when (role) {
                                     "customer" -> Screen.GuestDashboard
-                                    "stylist", "babershop", "admin" -> Screen.BaberDashboard
+                                    "stylist", "babershop", "admin", "owner" -> Screen.BaberDashboard
                                     else -> Screen.GuestDashboard
                                 }
 

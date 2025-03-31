@@ -6,5 +6,6 @@ data class ChatMessage(
     val message: String = "",
     val timestamp: Long = System.currentTimeMillis(),
     val isRead: Boolean = false,
-    val type: String = "text" // "text", "notification"
-)
+    val type: String = "text", // "text", "notification"
+    val reservationId: String? = null
+    )

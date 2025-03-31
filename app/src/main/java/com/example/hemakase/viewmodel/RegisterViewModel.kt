@@ -11,6 +11,7 @@ import com.example.hemakase.data.ChatMessage
 import com.example.hemakase.data.User
 import com.example.hemakase.data.Salon
 import com.example.hemakase.repository.FirebaseRepository
+import com.example.hemakase.repository.FirebaseRepository.getOrCreateChatRoom
 import com.google.firebase.Firebase
 import com.google.firebase.Timestamp
 import com.google.firebase.auth.FirebaseAuth
@@ -59,38 +60,39 @@ class RegisterViewModel : ViewModel() {
         tempProfileUri = profileUri
     }
 
+
     fun createInitialChatRooms(customerId: String, stylistId: String, salonId: String) {
-        val db = Firebase.firestore
-        val chatRoomsRef = db.collection("chat_rooms")
+        viewModelScope.launch {
+            try {
+                // 고객 ↔ 미용사
+                getOrCreateChatRoom(
+                    senderId = customerId,
+                    receiverId = stylistId,
+                    senderRole = "guest",
+                    receiverRole = "stylist"
+                )
 
-        // (1) 고객 ↔ 미용사
-        val stylistRoom = mapOf(
-            "participants" to listOf(customerId, stylistId),
-            "createdAt" to System.currentTimeMillis()
-        )
-        chatRoomsRef.add(stylistRoom)
+                // 고객 ↔ 오너, 미용사 ↔ 오너
+                val salonDoc = db.collection("salons").document(salonId).get().await()
+                val ownerId = salonDoc.getString("ownerId") ?: return@launch
 
-        // (2) 고객 ↔ 오너 & 3. 미용사 ↔ 오너
-        db.collection("salons").document(salonId).get()
-            .addOnSuccessListener { salonDoc ->
-                val ownerId = salonDoc.getString("ownerId")
+                getOrCreateChatRoom(
+                    senderId = customerId,
+                    receiverId = ownerId,
+                    senderRole = "guest",
+                    receiverRole = "owner"
+                )
 
-                if (!ownerId.isNullOrEmpty()) {
-                    // 2. 고객 ↔ 오너
-                    val ownerRoom = mapOf(
-                        "participants" to listOf(customerId, ownerId),
-                        "createdAt" to System.currentTimeMillis()
-                    )
-                    chatRoomsRef.add(ownerRoom)
-
-                    // 3. 미용사 ↔ 오너
-                    val stylistOwnerRoom = mapOf(
-                        "participants" to listOf(stylistId, ownerId),
-                        "createdAt" to System.currentTimeMillis()
-                    )
-                    chatRoomsRef.add(stylistOwnerRoom)
-                }
+                getOrCreateChatRoom(
+                    senderId = stylistId,
+                    receiverId = ownerId,
+                    senderRole = "stylist",
+                    receiverRole = "owner"
+                )
+            } catch (e: Exception) {
+                Log.e("RegisterVM", "초기 채팅방 생성 실패: ${e.message}")
             }
+        }
     }
 
     fun registerUser(
@@ -112,7 +114,7 @@ class RegisterViewModel : ViewModel() {
                 val uid = currentUser.uid
                 val email = currentUser.email ?: ""
 
-                val fcmToken = FirebaseMessaging.getInstance().token.await() // ✅ FCM 토큰 받기
+                val fcmToken = FirebaseMessaging.getInstance().token.await()
 
                 val photoUrl = profileUri?.let {
                     try {
@@ -157,7 +159,7 @@ class RegisterViewModel : ViewModel() {
                         salonId = salonId,
                         address = address,
                         stylistName = name,
-                        fcmToken = fcmToken // 추가
+                        fcmToken = fcmToken
                     )
 
                     db.collection("users").document(uid).set(user).await()
@@ -174,7 +176,7 @@ class RegisterViewModel : ViewModel() {
                         address = address,
                         stylistId = selectedStylistId,
                         stylistName = selectedStylistName,
-                        fcmToken = fcmToken // 추가
+                        fcmToken = fcmToken
                     )
 
                     db.collection("users").document(uid).set(user).await()
@@ -194,7 +196,7 @@ class RegisterViewModel : ViewModel() {
             }
         }
     }
-
-
-
 }
+
+
+

@@ -16,11 +16,15 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.Response
 import org.json.JSONObject
+import java.io.FileInputStream
 import java.io.IOException
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
 import java.util.TimeZone
+import com.google.api.client.googleapis.auth.oauth2.GoogleCredential
+import com.google.firebase.database.FirebaseDatabase
+
 
 object FirebaseRepository {
 
@@ -67,6 +71,58 @@ object FirebaseRepository {
             defaultTreatments.forEach {
                 treatmentsRef.add(it).await()
             }
+        }
+    }
+
+//    suspend fun getOrCreateChatRoom(senderId: String, receiverId: String): String {
+//        val db = FirebaseFirestore.getInstance()
+//        val participants = listOf(senderId, receiverId).sorted() // 정렬하여 일관성 유지
+//
+//        val querySnapshot = db.collection("chat_rooms")
+//            .whereEqualTo("participants", participants)
+//            .get()
+//            .await()
+//
+//        return if (!querySnapshot.isEmpty) {
+//            querySnapshot.documents.first().id // 기존 채팅방 ID 반환
+//        } else {
+//            val newRoom = hashMapOf(
+//                "participants" to participants,
+//                "createdAt" to System.currentTimeMillis()
+//            )
+//            val newRoomRef = db.collection("chat_rooms").add(newRoom).await()
+//            newRoomRef.id
+//        }
+//    }
+
+    fun generateChatRoomId(senderId: String, receiverId: String, senderRole: String, receiverRole: String): String {
+        return when {
+            senderRole == "guest" && receiverRole == "owner" -> "${senderId}_owner"
+            senderRole == "guest" && receiverRole == "stylist" -> "${senderId}_stylist_${receiverId}"
+            senderRole == "stylist" && receiverRole == "owner" -> "${senderId}_owner"
+            else -> listOf(senderId, receiverId).sorted().joinToString("_")
+        }
+    }
+
+    suspend fun getOrCreateChatRoom(senderId: String, receiverId: String, senderRole: String, receiverRole: String): String {
+        val db = FirebaseFirestore.getInstance()
+        val chatRoomId = generateChatRoomId(senderId, receiverId, senderRole, receiverRole)
+
+        val querySnapshot = db.collection("chat_rooms")
+            .whereEqualTo("chatRoomId", chatRoomId)
+            .get()
+            .await()
+
+        return if (!querySnapshot.isEmpty) {
+            querySnapshot.documents.first().id
+        } else {
+            val newRoom = hashMapOf(
+                "chatRoomId" to chatRoomId,
+                "participants" to listOf(senderId, receiverId),
+                "createdAt" to System.currentTimeMillis()
+            )
+            val newRoomRef = db.collection("chat_rooms").add(newRoom).await()
+            newRoomRef.id
         }
     }
 
@@ -123,39 +179,116 @@ object FirebaseRepository {
             }
     }
 
-    fun sendPushNotification(token: String, title: String, body: String) {
-        val notificationData = mapOf(
-            "to" to token,
-            "notification" to mapOf(
-                "title" to title,
-                "body" to body
-            )
-        )
+    // FirebaseRepository.kt에 추가
+    suspend fun sendReservationConfirmedMessage(
+        customerId: String,
+        stylistId: String,
+        reservationId: String
+    ) {
+        try {
+            val db = FirebaseFirestore.getInstance()
 
-        val client = OkHttpClient()
-        val mediaType = "application/json; charset=utf-8".toMediaType()
-        val requestBody = JSONObject(notificationData).toString().toRequestBody(mediaType)
+            val customerDoc = db.collection("users").document(customerId).get().await()
+            val stylistDoc = db.collection("users").document(stylistId).get().await()
 
-        val request = Request.Builder()
-            .url("https://fcm.googleapis.com/fcm/send")
-            .post(requestBody)
-            .addHeader("Authorization", "key=YOUR_SERVER_KEY_HERE") // 🔑 서버키 등록 필요
-            .addHeader("Content-Type", "application/json")
-            .build()
+            val customerName = customerDoc.getString("name") ?: "고객"
+            val stylistName = stylistDoc.getString("name") ?: "담당자"
+            val salonId = customerDoc.getString("salonId") ?: return
+            val salonDoc = db.collection("salons").document(salonId).get().await()
+            val ownerId = salonDoc.getString("ownerId") ?: return
 
-        client.newCall(request).enqueue(object : Callback {
-            override fun onFailure(call: Call, e: IOException) {
-                Log.e("FCM", "푸시 전송 실패", e)
-            }
+            val targets = listOf(stylistId to "stylist", ownerId to "owner")
 
-            override fun onResponse(call: Call, response: Response) {
-                if (response.isSuccessful) {
-                    Log.d("FCM", "푸시 전송 성공")
-                } else {
-                    Log.e("FCM", "푸시 응답 실패: ${response.code}")
+            for ((receiverId, receiverRole) in targets) {
+                val message = ChatMessage(
+                    senderId = customerId,
+                    receiverId = receiverId,
+                    message = "${customerName}님의 예약 요청이 도착했습니다.",
+                    timestamp = System.currentTimeMillis(),
+                    isRead = false,
+                    type = "notification",
+                    reservationId = reservationId
+                )
+
+                sendMessage(message)
+
+                val roomId = getOrCreateChatRoom(
+                    senderId = customerId,
+                    receiverId = receiverId,
+                    senderRole = "guest",
+                    receiverRole = receiverRole
+                )
+
+                FirebaseDatabase.getInstance()
+                    .getReference("chat_rooms/$roomId/messages")
+                    .push()
+                    .setValue(message)
+                    .await()
+
+                val userDoc = db.collection("users").document(receiverId).get().await()
+                val fcmToken = userDoc.getString("fcmToken")
+                if (!fcmToken.isNullOrBlank()) {
+                    sendPushNotificationV1(
+                        targetToken = fcmToken,
+                        title = "새 예약 요청",
+                        body = "${customerName}님이 예약을 요청했습니다."
+                    )
                 }
             }
-        })
+        } catch (e: Exception) {
+            Log.e("FirebaseRepo", "예약 확인 메시지 전송 실패: ${e.message}")
+        }
+    }
+
+
+    suspend fun sendPushNotificationV1(
+        targetToken: String,
+        title: String,
+        body: String
+    ) {
+        // 서비스 계정 키 JSON 경로
+        try {
+            val credentialsStream =
+                FileInputStream("C:/Users/kci01/AndroidStudioProjects/Hemakase/app/hemakase-e80494f3228f.json")
+            val googleCredential = GoogleCredential.fromStream(credentialsStream)
+                .createScoped(listOf("https://www.googleapis.com/auth/firebase.messaging"))
+            googleCredential.refreshToken()
+            val accessToken = googleCredential.accessToken
+
+            val projectId = "hemakase"
+            val url = "https://fcm.googleapis.com/v1/projects/$projectId/messages:send"
+
+            val json = JSONObject().apply {
+                put("message", JSONObject().apply {
+                    put("token", targetToken)
+                    put("notification", JSONObject().apply {
+                        put("title", title)
+                        put("body", body)
+                    })
+                })
+            }
+
+            val request = Request.Builder()
+                .url(url)
+                .addHeader("Authorization", "Bearer $accessToken")
+                .addHeader("Content-Type", "application/json; UTF-8")
+                .post(
+                    json.toString().toRequestBody("application/json; charset=utf-8".toMediaType())
+                )
+                .build()
+
+            val client = OkHttpClient()
+            val response = client.newCall(request).execute()
+
+            if (response.isSuccessful) {
+                Log.d("FCM", "푸시 알림 성공")
+            } else {
+                Log.e("FCM", "푸시 실패: ${response.code}, ${response.body?.string()}")
+            }
+
+        } catch (e: Exception) {
+            Log.e("FCM", "푸시 오류: ${e.message}")
+        }
     }
 
 
@@ -169,7 +302,11 @@ object FirebaseRepository {
             }
     }
 
-    fun createReservation(reservation: Reservation, onSuccess: () -> Unit, onFailure: (Exception) -> Unit) {
+    fun createReservation(
+        reservation: Reservation,
+        onSuccess: () -> Unit,
+        onFailure: (Exception) -> Unit
+    ) {
         db.collection("reservations")
             .add(reservation)
             .addOnSuccessListener { onSuccess() }
