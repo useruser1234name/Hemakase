@@ -77,7 +77,6 @@ fun BarberSettingsScreenClientsTab(
 //    selectedTab: Int,
 //    onTabSelected: (Int) -> Unit
 ) {
-
     var selectedInternalTab by remember { mutableStateOf(0) }
 
     // 샘플 서비스 리스트
@@ -87,78 +86,68 @@ fun BarberSettingsScreenClientsTab(
         ServiceItem("Beard trim", "$")
     )
 
-    Scaffold(
-        containerColor = Color.White,
-//        topBar = { SettingTopBar() },
-//        bottomBar = { StylistBottomBar(
-//            selectedTab = selectedTab,
-//            onTabSelected = onTabSelected
-//        ) }
-    ) { innerPadding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding)
-                .padding(horizontal = 16.dp)
+    // ✅ Scaffold 대신 Column 만으로 레이아웃 구성
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = 16.dp)
+    ) {
+        // (1) 프로필 섹션
+        ProfileSection(
+            imageUrl = "",
+            name = "John Daniel",
+        )
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        TabRow(
+            selectedTabIndex = selectedInternalTab,
+            containerColor = Color.White,
+            modifier = Modifier.fillMaxWidth()
         ) {
-            // (1) 프로필 섹션
-            ProfileSection(
-                imageUrl = "",  // 실제 URL 또는 리소스
-                name = "John Daniel",
+            Tab(
+                selected = selectedInternalTab == 0,
+                onClick = { selectedInternalTab = 0 },
+                text = { Text("Barber") }
             )
+            Tab(
+                selected = selectedInternalTab == 1,
+                onClick = { selectedInternalTab = 1 },
+                text = { Text("Clients") }
+            )
+        }
 
-            // (2) 탭 (Barber / Clients), 하지만 selectedTab=1로 고정
-            Spacer(modifier = Modifier.height(16.dp))
-
-            ScrollableTabRow(
-                selectedTabIndex = selectedInternalTab,
-                containerColor = Color.White,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Tab(
-                    selected = selectedInternalTab == 0,
-                    onClick = { selectedInternalTab = 0 },
-                    text = { Text("Barber") }
-                )
-                Tab(
-                    selected = selectedInternalTab == 1,
-                    onClick = { selectedInternalTab = 1 },
-                    text = { Text("Clients") }
-                )
-            }
-
-            when (selectedInternalTab) {
-                0 -> BarberTabContent(serviceList)
-                1 -> ClientsTabContent()
-            }
+        when (selectedInternalTab) {
+            0 -> BarberTabContent(serviceList)
+            1 -> ClientsTabContent()
         }
     }
 }
 
 
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun SettingTopBar() {
-    Column {
-        CenterAlignedTopAppBar(
-            title = {
-                Text(
-                    text = "Settings",
-                    fontSize = 17.sp,
-                    fontWeight = FontWeight.Bold
-                )
-            },
-            colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
-                containerColor = Color.White // 앱바 배경 흰색
-            )
-        )
-        Divider(
-            thickness = 1.dp,
-            color = Color.Gray
-        )
-        Spacer(modifier = Modifier.height(20.dp))
-    }
-}
+//@OptIn(ExperimentalMaterial3Api::class)
+//@Composable
+//fun SettingTopBar() {
+//    Column {
+//        CenterAlignedTopAppBar(
+//            title = {
+//                Text(
+//                    text = "Settings",
+//                    fontSize = 17.sp,
+//                    fontWeight = FontWeight.Bold
+//                )
+//            },
+//            colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
+//                containerColor = Color.White // 앱바 배경 흰색
+//            )
+//        )
+//        Divider(
+//            thickness = 1.dp,
+//            color = Color.Gray
+//        )
+//        Spacer(modifier = Modifier.height(20.dp))
+//    }
+//}
 
 @Composable
 fun ProfileSection(
