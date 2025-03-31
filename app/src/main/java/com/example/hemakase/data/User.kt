@@ -13,5 +13,6 @@ data class User(
     val salonId: String? = null, // 추가된 부분
     val createdAt: Long = System.currentTimeMillis(),
     val stylistId: String? = null,
-    val stylistName: String? = null
+    val stylistName: String? = null,
+    val fcmToken: String? = ""
 )

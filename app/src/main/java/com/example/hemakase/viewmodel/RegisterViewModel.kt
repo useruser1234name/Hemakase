@@ -4,12 +4,17 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.hemakase.data.ChatMessage
 import com.example.hemakase.data.User
 import com.example.hemakase.data.Salon
+import com.example.hemakase.repository.FirebaseRepository
 import com.google.firebase.Firebase
+import com.google.firebase.Timestamp
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.database.FirebaseDatabase
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.firestore
 import com.google.firebase.storage.FirebaseStorage
@@ -18,6 +23,9 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import java.io.ByteArrayOutputStream
+import com.google.firebase.messaging.FirebaseMessaging
+import kotlinx.coroutines.tasks.await
+
 
 class RegisterViewModel : ViewModel() {
 
@@ -62,18 +70,25 @@ class RegisterViewModel : ViewModel() {
         )
         chatRoomsRef.add(stylistRoom)
 
-        // (2) 고객 ↔ 미용실 관리자
+        // (2) 고객 ↔ 오너 & 3. 미용사 ↔ 오너
         db.collection("salons").document(salonId).get()
             .addOnSuccessListener { salonDoc ->
-                val stylistIds = salonDoc.get("stylistIds") as? List<String>
-                val ownerId = stylistIds?.getOrNull(0) // 인덱스 0이 관리자
+                val ownerId = salonDoc.getString("ownerId")
 
-                ownerId?.let {
+                if (!ownerId.isNullOrEmpty()) {
+                    // 2. 고객 ↔ 오너
                     val ownerRoom = mapOf(
-                        "participants" to listOf(customerId, it),
+                        "participants" to listOf(customerId, ownerId),
                         "createdAt" to System.currentTimeMillis()
                     )
                     chatRoomsRef.add(ownerRoom)
+
+                    // 3. 미용사 ↔ 오너
+                    val stylistOwnerRoom = mapOf(
+                        "participants" to listOf(stylistId, ownerId),
+                        "createdAt" to System.currentTimeMillis()
+                    )
+                    chatRoomsRef.add(stylistOwnerRoom)
                 }
             }
     }
@@ -97,6 +112,8 @@ class RegisterViewModel : ViewModel() {
                 val uid = currentUser.uid
                 val email = currentUser.email ?: ""
 
+                val fcmToken = FirebaseMessaging.getInstance().token.await() // ✅ FCM 토큰 받기
+
                 val photoUrl = profileUri?.let {
                     try {
                         val stream = context.contentResolver.openInputStream(it)
@@ -117,9 +134,7 @@ class RegisterViewModel : ViewModel() {
                 }
 
                 if (isHairdresser) {
-                    // 미용사 → 미용실 등록 또는 선택
                     val salonId = selectedSalonId ?: run {
-                        // 미용실 신규 등록
                         val salonRef = db.collection("salons").document()
                         val salon = Salon(
                             id = salonRef.id,
@@ -141,13 +156,13 @@ class RegisterViewModel : ViewModel() {
                         photo = photoUrl,
                         salonId = salonId,
                         address = address,
-                        stylistName = name
+                        stylistName = name,
+                        fcmToken = fcmToken // 추가
                     )
 
                     db.collection("users").document(uid).set(user).await()
 
                 } else {
-                    // 고객 → salonId 선택 필요
                     val user = User(
                         id = uid,
                         name = name,
@@ -155,15 +170,15 @@ class RegisterViewModel : ViewModel() {
                         role = "customer",
                         phone = phone,
                         photo = photoUrl,
-                        salonId = selectedSalonId, // 고객은 선택 필수
+                        salonId = selectedSalonId,
                         address = address,
                         stylistId = selectedStylistId,
-                        stylistName = selectedStylistName
+                        stylistName = selectedStylistName,
+                        fcmToken = fcmToken // 추가
                     )
 
                     db.collection("users").document(uid).set(user).await()
 
-                    // ✅ 채팅방 자동 생성 추가
                     createInitialChatRooms(
                         customerId = uid,
                         stylistId = selectedStylistId,
@@ -179,4 +194,7 @@ class RegisterViewModel : ViewModel() {
             }
         }
     }
+
+
+
 }
