@@ -16,9 +16,9 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.*
 
 @Composable
-fun RegisterScreen(
+fun ChooseClientGuestScreen(
     onBackPressed: () -> Unit = {},
-    onNextClicked: (String) -> Unit = {}
+    onNextClicked: (String) -> Unit
 ) {
     var selectedRole by remember { mutableStateOf<String?>(null) }
 
