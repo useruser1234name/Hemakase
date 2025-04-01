@@ -8,7 +8,6 @@ import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.*
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.example.hemakase.data.Treatment
 import com.example.hemakase.navigator.BaberDashboardScreen
 import com.example.hemakase.navigator.GuestMainScreen
 import com.example.hemakase.ui.theme.*
@@ -21,15 +20,16 @@ import kotlinx.coroutines.launch
 import com.google.firebase.FirebaseApp
 import com.google.firebase.appcheck.FirebaseAppCheck
 import com.google.firebase.appcheck.playintegrity.PlayIntegrityAppCheckProviderFactory
-import com.google.firebase.firestore.FirebaseFirestore
 
 class MainActivity : ComponentActivity() {
 
 
     enum class Screen {
         First, Personal, Camera, Hairshop,
+        ChooseClientGuest,
         GuestDashboard, // 고객용
-        BaberDashboard   // 미용사용
+        BaberDashboard,   // 미용사용
+        BaberRegister
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -94,7 +94,7 @@ class MainActivity : ComponentActivity() {
                     if (needToRegister && currentScreen == Screen.First) {
                         viewModel.resetRegisterTrigger()
                         Toast.makeText(context, "회원가입이 필요합니다.", Toast.LENGTH_SHORT).show()
-                        currentScreen = Screen.Personal
+                        currentScreen = Screen.ChooseClientGuest
                     }
                 }
 
@@ -125,6 +125,16 @@ class MainActivity : ComponentActivity() {
                             }
                         )
                     }
+                    Screen.ChooseClientGuest -> {
+                        ChooseClientGuestScreen(
+                            onNextClicked = { selectedRole ->
+                                when (selectedRole) {
+                                    "고객" -> currentScreen = Screen.Personal
+                                    "미용사" -> currentScreen = Screen.BaberRegister
+                                }
+                            }
+                        )
+                    }
 
                     Screen.Personal -> {
                         PersonalScreen(
@@ -146,6 +156,13 @@ class MainActivity : ComponentActivity() {
                         HairshopScreen(
                             onFinishRegistration = {
                                 currentScreen = Screen.GuestDashboard
+                            }
+                        )
+                    }
+                    Screen.BaberRegister -> {
+                        BaberRegisterScreen(
+                            onNextClick = {
+                                currentScreen = Screen.BaberDashboard
                             }
                         )
                     }
